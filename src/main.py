@@ -1,12 +1,7 @@
+"""
+Application entrypoint.
+Imports and exports the FastAPI application instance from the package module.
+"""
+from fastapi_starter_project.main import app
 
-from fastapi import FastAPI
-
-app = FastAPI(
-    title="FastAPI Starter Project",
-    description="FastAPI Starter Project",
-    version="1.0.0"
-)
-
-@app.get('/')
-def read_root():
-    return {"Hello": "World"}
+__all__ = ["app"]
