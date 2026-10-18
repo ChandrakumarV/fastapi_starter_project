@@ -1,18 +1,36 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from fastapi_starter_project.api.v1.endpoints import auth, health, users
+from sqlalchemy import text
+from fastapi_starter_project.api.v1.endpoints import health
 from fastapi_starter_project.api.v1.router import api_v1_router
 from fastapi_starter_project.core.config import settings
+from fastapi_starter_project.core.database import async_engine
+
+logger = logging.getLogger("fastapi_starter_project")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Startup actions (e.g., database connection pool initialization)
+    # --- Startup ---
+    logger.info("Checking database connection...")
+    try:
+        async with async_engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        logger.info("PostgreSQL database connection established successfully.")
+    except Exception as exc:
+        logger.error("Failed to connect to PostgreSQL: %s", exc)
+        raise exc
+
     yield
-    # Shutdown actions (e.g., closing connections)
+
+    # --- Shutdown ---
+    logger.info("Closing database connection pool...")
+    await async_engine.dispose()
+    logger.info("Database connection pool closed successfully.")
 
 
 def create_application() -> FastAPI:
@@ -41,13 +59,11 @@ def create_application() -> FastAPI:
     def root():
         return RedirectResponse(url="/docs")
 
+    # Mount unversioned public health endpoint: /health
+    application.include_router(health.router, tags=["Health"])
+
     # Mount versioned API router: /api/v1/...
     application.include_router(api_v1_router, prefix=settings.API_V1_STR)
-
-    # Mount root aliases for convenience (/health, /login, /logout, /me)
-    application.include_router(health.router, tags=["Health"], include_in_schema=False)
-    application.include_router(auth.router, tags=["Authentication"], include_in_schema=False)
-    application.include_router(users.router, tags=["Users"], include_in_schema=False)
 
     return application
 

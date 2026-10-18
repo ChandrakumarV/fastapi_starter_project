@@ -22,6 +22,23 @@ class Settings(BaseSettings):
     # Routing
     API_V1_STR: str = "/api/v1"
 
+    # Database (PostgreSQL)
+    POSTGRES_SERVER: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_USER: str = "root"
+    POSTGRES_PASSWORD: str = "root"
+    POSTGRES_DB: str = "postgres"
+
+    @property
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """Async database URI for FastAPI application runtime (asyncpg)."""
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+    @property
+    def SQLALCHEMY_SYNC_DATABASE_URI(self) -> str:
+        """Synchronous database URI for Alembic migrations and tooling (psycopg)."""
+        return f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
     # Security & Tokens
     SECRET_KEY: str = "development-super-secret-key-change-in-production"
     ALGORITHM: str = "HS256"

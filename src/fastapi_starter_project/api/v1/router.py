@@ -1,12 +1,13 @@
 from fastapi import APIRouter
-from fastapi_starter_project.api.v1.endpoints import auth, health, users
+from fastapi_starter_project.api.v1.endpoints import admin, auth, me
 
 api_v1_router = APIRouter()
 
-# Public endpoints
-api_v1_router.include_router(health.router, tags=["Health"])
-api_v1_router.include_router(auth.router, tags=["Authentication"])
+# Authentication & Registration
+api_v1_router.include_router(auth.router)
 
-# Protected endpoints
-api_v1_router.include_router(users.router, tags=["Users"])
-api_v1_router.include_router(users.router, prefix="/users", tags=["Users"], include_in_schema=False)
+# User endpoints (/me, etc.)
+api_v1_router.include_router(me.router)
+
+# Admin endpoints (/admin/auth/..., /admin/me, /admin/users)
+api_v1_router.include_router(admin.router)
