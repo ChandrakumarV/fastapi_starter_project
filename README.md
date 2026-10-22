@@ -12,7 +12,7 @@ A production-grade, multi-tenant backend built with [FastAPI](https://fastapi.ti
 - **Instant Session Invalidation**: Immediate session termination across user profile edits, password resets, soft deletes, and tenant deactivations.
 - **PostgreSQL Database**: High-performance asynchronous database operations powered by `SQLAlchemy 2.0` and `asyncpg` with secure UUID primary keys.
 - **Alembic Database Migrations**: Fully configured async schema migrations with automated generation capabilities.
-- **Cookie & Bearer Token Authentication**: Dual-mode authentication supporting secure HTTP-only cookies (`access_token`) and `Authorization: Bearer <token>` headers.
+- **HTTP-Only Cookie Authentication**: Secure HTTP-only cookie authentication (`access_token`) for all API requests, preventing XSS token theft.
 - **Docker Compose**: Pre-configured multi-container environment with PostgreSQL and Redis for instant local development.
 - **Automated Testing Suite**: Full integration test suite using `pytest` and `anyio`.
 

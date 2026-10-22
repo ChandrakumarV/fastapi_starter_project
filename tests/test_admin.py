@@ -293,3 +293,25 @@ def test_platform_user_role_restrictions(client: TestClient) -> None:
     # 7. Platform user CAN manage tenants
     p_tenants = client.get("/platform/tenants", cookies=p_cookie)
     assert p_tenants.status_code == 200
+
+
+def test_bearer_token_header_is_rejected(client: TestClient) -> None:
+    # 1. Login to obtain a valid token
+    login_res = client.post(
+        "/platform/login",
+        json={"username": "admin", "password": "password"},
+    )
+    assert login_res.status_code == 200
+    token = login_res.cookies[settings.COOKIE_NAME]
+
+    # 2. Clear client session cookies so no cookie is sent
+    client.cookies.clear()
+
+    # 3. Attempt to authenticate using Authorization: Bearer <token> header only
+    header_res = client.get(
+        "/platform/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    # Must be rejected because only HTTP-only cookie is accepted
+    assert header_res.status_code == 401
+    assert "Missing access token" in header_res.json()["detail"]

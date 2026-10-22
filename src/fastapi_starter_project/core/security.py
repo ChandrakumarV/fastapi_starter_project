@@ -67,10 +67,14 @@ def create_access_token(
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def decode_access_token(token: str) -> dict[str, Any]:
-    """Decodes JWT and validates signature and expiration."""
-    return jwt.decode(
+from fastapi_starter_project.schemas.auth import TokenPayload
+
+
+def decode_access_token(token: str) -> TokenPayload:
+    """Decodes JWT, validates signature and expiration, and returns typed TokenPayload."""
+    payload = jwt.decode(
         token,
         settings.SECRET_KEY,
         algorithms=[settings.ALGORITHM],
     )
+    return TokenPayload.model_validate(payload)

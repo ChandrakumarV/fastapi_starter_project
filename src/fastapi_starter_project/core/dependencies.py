@@ -1,8 +1,8 @@
 from typing import Annotated
 import uuid
 from fastapi import Cookie, Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.config import settings
 from fastapi_starter_project.core.database import get_db
@@ -13,53 +13,39 @@ from fastapi_starter_project.services.session_service import session_service
 from fastapi_starter_project.services.tenant_service import tenant_service
 from fastapi_starter_project.services.user_service import user_service
 
-bearer_scheme = HTTPBearer(auto_error=False)
-
 
 async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     access_token: Annotated[str | None, Cookie(alias=settings.COOKIE_NAME)] = None,
-    auth_header: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
 ) -> UserInDB:
     """
-    Extracts and verifies JWT from Authorization header (Bearer) or HTTP-only cookie.
+    Extracts and verifies JWT from HTTP-only cookie.
     Validates Redis session for tenant_admin and tenant_user roles.
     """
-    token: str | None = None
-    if auth_header and auth_header.credentials:
-        token = auth_header.credentials
-    elif access_token:
-        token = access_token
-
-    if not token:
+    if not access_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required. Missing access token.",
         )
 
+    token = access_token
+
     try:
         payload = decode_access_token(token)
-        username: str | None = payload.get("sub")
-        role: str | None = payload.get("role")
-        session_id: str | None = payload.get("session_id")
-
-        if username is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload: missing subject identifier.",
-            )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired. Please log in again.",
         )
-    except jwt.PyJWTError:
+    except (jwt.PyJWTError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials.",
         )
 
-    session_id = payload.get("session_id")
+    username: str = payload.sub
+    role: str | None = payload.role
+    session_id: str | None = payload.session_id
 
     # Fast-path: Check active Redis session first.
     # When a session is active, user and tenant validity are already guaranteed in memory,
