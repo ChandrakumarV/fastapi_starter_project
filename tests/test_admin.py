@@ -36,6 +36,7 @@ def test_platform_flow_and_me_crud(client: TestClient) -> None:
     assert me_res.status_code == 200
     assert me_res.json()["username"] == "admin"
     assert me_res.json()["role"] == "platform_admin"
+    assert "tenant_id" not in me_res.json()
 
     # 3. PUT /platform/me (update profile)
     put_res = client.put(
@@ -45,6 +46,7 @@ def test_platform_flow_and_me_crud(client: TestClient) -> None:
     )
     assert put_res.status_code == 200
     assert put_res.json()["full_name"] == "John Doe Senior"
+    assert "tenant_id" not in put_res.json()
 
     # 4. Platform Admin creates a platform user
     new_user_username = f"puser_{uuid.uuid4().hex[:6]}"
@@ -62,10 +64,12 @@ def test_platform_flow_and_me_crud(client: TestClient) -> None:
     assert create_res.status_code == 201
     assert create_res.json()["username"] == new_user_username
     assert create_res.json()["role"] == "platform_user"
+    assert "tenant_id" not in create_res.json()
 
     # 5. Platform Admin lists all users
     list_res = client.get("/platform/users", cookies=admin_cookie)
     assert list_res.status_code == 200
+    assert all("tenant_id" not in u for u in list_res.json())
     usernames = [u["username"] for u in list_res.json()]
     assert "admin" in usernames
     assert new_user_username in usernames

@@ -17,7 +17,6 @@ class UserBase(BaseModel):
     email: EmailStr = Field(..., examples=["admin@example.com"])
     full_name: str = Field(..., examples=["Platform Admin"])
     role: str = Field(default=UserRole.PLATFORM_USER.value, examples=[UserRole.PLATFORM_USER.value])
-    tenant_id: uuid.UUID | None = None
     created_by_id: uuid.UUID | None = None
     is_active: bool = Field(default=True, examples=[True])
     is_deleted: bool = Field(default=False, examples=[False])
@@ -53,4 +52,5 @@ class UserStatusUpdate(BaseModel):
 class UserInDB(UserBase):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    tenant_id: uuid.UUID | None = None
     hashed_password: str = ""
