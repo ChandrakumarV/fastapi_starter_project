@@ -57,9 +57,9 @@ Base prefix: `/admin`
 
 Login request
 
-```
+```json
 {
-  "email_or_username": "admin@example.com",
+  "username": "admin",
   "password": "password"
 }
 ```

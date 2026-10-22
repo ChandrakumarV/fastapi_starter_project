@@ -21,7 +21,7 @@ class UsernameAvailabilityResponse(BaseModel):
 
 
 class AdminLoginRequest(BaseModel):
-    email_or_username: str = Field(..., min_length=3, examples=["admin@example.com"])
+    username: str = Field(..., min_length=1, examples=["admin"])
     password: str = Field(..., min_length=4, examples=["password"])
 
 

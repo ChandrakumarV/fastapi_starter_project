@@ -3,15 +3,22 @@ from starlette.testclient import TestClient
 from fastapi_starter_project.core.config import settings
 
 
-def test_platform_login_rejects_normal_user(client: TestClient) -> None:
-    # abc_user is a normal tenant user (role='tenant_user')
-    response = client.post(
+def test_platform_login_rejects_non_platform_roles(client: TestClient) -> None:
+    # 1. abc_user is a normal tenant user (role='tenant_user')
+    res_user = client.post(
         "/platform/login",
         json={"username": "abc_user", "password": "password"},
     )
-    # Must be rejected because role is not admin
-    assert response.status_code == 403
-    assert "Admin privileges required" in response.json()["detail"]
+    assert res_user.status_code == 403
+    assert "Platform privileges required" in res_user.json()["detail"]
+
+    # 2. abc_admin is a tenant admin (role='tenant_admin') - must also be rejected from /platform/login
+    res_admin = client.post(
+        "/platform/login",
+        json={"username": "abc_admin", "password": "password"},
+    )
+    assert res_admin.status_code == 403
+    assert "Platform privileges required" in res_admin.json()["detail"]
 
 
 def test_platform_flow_and_me_crud(client: TestClient) -> None:

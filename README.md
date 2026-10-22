@@ -36,7 +36,7 @@ The platform defines four standard user roles in `fastapi_starter_project.models
 | **Platform Users** (`/platform/users`) | ✅ Full Access | ❌ Forbidden (403) | ❌ Forbidden (403) | ❌ Forbidden (403) |
 | **Tenants** (`/platform/tenants`) | ✅ Full Access | ✅ Full Access | ❌ Forbidden (403) | ❌ Forbidden (403) |
 | **Tenant Users** (`/platform/tenants/{id}/users`) | ✅ Full Access | ✅ Full Access | ✅ Own Tenant Only | ❌ Forbidden (403) |
-| **Platform Login** (`/platform/login`) | ✅ Allowed | ✅ Allowed | ✅ Allowed | ❌ Forbidden (403) |
+| **Platform Login** (`/platform/login`) | ✅ Allowed | ✅ Allowed | ❌ Forbidden (403) | ❌ Forbidden (403) |
 | **Platform Me** (`/platform/me`) | ✅ Allowed | ✅ Allowed | ❌ Forbidden (403) | ❌ Forbidden (403) |
 
 > [!NOTE]
@@ -194,7 +194,7 @@ uv run pytest
 
 | Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/platform/login` | Authenticates administrator credentials and sets an HTTP-only JWT cookie with cached session | Public (`platform_admin`, `platform_user`, `tenant_admin`) |
+| `POST` | `/platform/login` | Authenticates platform credentials and sets an HTTP-only JWT cookie with cached session | Public (`platform_admin`, `platform_user`) |
 | `DELETE` | `/platform/logout` | Clears the JWT authentication cookie and revokes session | Public |
 | `GET` | `/platform/me` | Fetches currently authenticated platform profile | Protected (`require_platform_access`) |
 | `PUT` | `/platform/me` | Updates current platform user profile | Protected (`require_platform_access`) |

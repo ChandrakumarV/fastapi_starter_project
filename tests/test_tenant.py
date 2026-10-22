@@ -1,13 +1,42 @@
 import uuid
+from datetime import datetime, timezone
+import json
+import redis
 from starlette.testclient import TestClient
 from fastapi_starter_project.core.config import settings
+from fastapi_starter_project.core.security import create_access_token
 from fastapi_starter_project.services.session_service import session_service
+
+
+def _create_test_session_sync(
+    user_id: uuid.UUID,
+    role: str,
+    tenant_id: uuid.UUID,
+    extra_data: dict | None = None,
+) -> str:
+    session_id = str(uuid.uuid4())
+    payload = {
+        "session_id": session_id,
+        "user_id": str(user_id),
+        "tenant_id": str(tenant_id),
+        "role": role,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if extra_data:
+        payload.update(extra_data)
+    r = redis.from_url(settings.REDIS_URL)
+    r.set(
+        f"session:{session_id}",
+        json.dumps(payload, default=str),
+        ex=settings.SESSION_EXPIRE_SECONDS,
+    )
+    return session_id
 
 
 def get_admin_cookie(client: TestClient) -> dict[str, str]:
     login_res = client.post(
         "/platform/login",
-        json={"email_or_username": "admin@example.com", "password": "password"},
+        json={"username": "admin", "password": "password"},
     )
     assert login_res.status_code == 200
     assert settings.COOKIE_NAME in login_res.cookies
@@ -15,25 +44,26 @@ def get_admin_cookie(client: TestClient) -> dict[str, str]:
 
 
 def test_admin_login_and_logout(client: TestClient) -> None:
-    # 1. Login with email
-    login_res = client.post(
-        "/platform/login",
-        json={"email_or_username": "admin@example.com", "password": "password"},
-    )
-    assert login_res.status_code == 200
-    assert settings.COOKIE_NAME in login_res.cookies
-
-    # 2. Login with username
+    # 1. Login with username succeeds
     login_user_res = client.post(
         "/platform/login",
-        json={"email_or_username": "admin", "password": "password"},
+        json={"username": "admin", "password": "password"},
     )
     assert login_user_res.status_code == 200
+    assert settings.COOKIE_NAME in login_user_res.cookies
+
+    # 2. Login with email is rejected (only username is allowed)
+    login_email_res = client.post(
+        "/platform/login",
+        json={"username": "admin@example.com", "password": "password"},
+    )
+    assert login_email_res.status_code == 401
+    assert "Incorrect username or password" in login_email_res.json()["detail"]
 
     # 3. Invalid credentials
     invalid_res = client.post(
         "/platform/login",
-        json={"email_or_username": "admin", "password": "wrongpassword"},
+        json={"username": "admin", "password": "wrongpassword"},
     )
     assert invalid_res.status_code == 401
 
@@ -275,13 +305,30 @@ def test_multi_role_authorization_matrix(client: TestClient) -> None:
     assert res_b.status_code == 201
     tenant_b_id = res_b.json()["id"]
 
-    # --- 4. Login as Tenant A Admin ---
+    # --- 4. Verify Tenant A Admin CANNOT log in to /platform/login ---
     t_a_login = client.post(
         "/platform/login",
         json={"username": t_a_admin_user, "password": "password123"},
     )
-    assert t_a_login.status_code == 200
-    t_a_cookie = {settings.COOKIE_NAME: t_a_login.cookies[settings.COOKIE_NAME]}
+    assert t_a_login.status_code == 403
+    assert "Platform privileges required" in t_a_login.json()["detail"]
+
+    # Create session and token for Tenant A Admin to test tenant operations
+    list_res = client.get(f"/platform/tenants/{tenant_a_id}/users", cookies=super_admin_cookie)
+    t_a_user_id = list_res.json()[0]["id"]
+    t_a_session_id = _create_test_session_sync(
+        user_id=uuid.UUID(t_a_user_id),
+        tenant_id=uuid.UUID(str(tenant_a_id)),
+        role="tenant_admin",
+        extra_data={"username": t_a_admin_user, "is_active": True},
+    )
+    t_a_token = create_access_token(
+        subject=t_a_admin_user,
+        role="tenant_admin",
+        tenant_id=str(tenant_a_id),
+        session_id=t_a_session_id,
+    )
+    t_a_cookie = {settings.COOKIE_NAME: t_a_token}
 
     # --- 5. Verify Platform User restrictions ---
     # Platform User CANNOT manage platform users

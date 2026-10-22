@@ -1,6 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.config import settings
 from fastapi_starter_project.core.database import get_db
@@ -14,35 +14,22 @@ router = APIRouter(tags=["Auth"])
 
 
 class AdminLoginInput(BaseModel):
-    email_or_username: str | None = Field(
-        default=None, examples=["admin@example.com"]
-    )
-    username: str | None = Field(default=None, examples=["admin"])
+    username: str = Field(..., min_length=1, examples=["admin"])
     password: str = Field(..., min_length=4, examples=["password"])
-
-    @model_validator(mode="after")
-    def resolve_identifier(self) -> "AdminLoginInput":
-        if not self.email_or_username and not self.username:
-            raise ValueError("email_or_username or username must be provided.")
-        return self
-
-    @property
-    def identifier(self) -> str:
-        return self.email_or_username or self.username or ""
 
 
 @router.post(
     "/login",
     response_model=MessageResponse,
     summary="Admin login",
-    description="Authenticates platform admin credentials and sets an HTTP-only JWT cookie.",
+    description="Authenticates platform admin credentials with username and password, setting an HTTP-only JWT cookie.",
 )
 async def admin_login(
     credentials: AdminLoginInput,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
-    user = await user_service.get_by_email_or_username(db, credentials.identifier)
+    user = await user_service.get_by_username(db, credentials.username)
     if user and user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -59,12 +46,11 @@ async def admin_login(
     allowed_roles = (
         UserRole.PLATFORM_ADMIN.value,
         UserRole.PLATFORM_USER.value,
-        UserRole.TENANT_ADMIN.value,
     )
-    if role_value not in allowed_roles and (not user.created_by_id or user.created_by_id != user.id):
+    if role_value not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin privileges required to access this endpoint.",
+            detail="Platform privileges required to access this endpoint.",
         )
 
     if not user.is_active:
