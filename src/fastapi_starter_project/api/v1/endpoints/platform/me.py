@@ -8,7 +8,7 @@ from fastapi_starter_project.schemas.common import MessageResponse
 from fastapi_starter_project.schemas.user import UserInDB, UserResponse, UserUpdate
 from fastapi_starter_project.services.user_service import user_service
 
-router = APIRouter(dependencies=[Depends(require_platform_access)], tags=["Platform Profile"])
+router = APIRouter(dependencies=[Depends(require_platform_access)], tags=["Profile"])
 
 
 @router.get(

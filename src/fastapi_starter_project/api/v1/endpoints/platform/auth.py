@@ -10,7 +10,7 @@ from fastapi_starter_project.schemas.common import MessageResponse
 from fastapi_starter_project.services.session_service import session_service
 from fastapi_starter_project.services.user_service import user_service
 
-router = APIRouter(tags=["Admin Auth"])
+router = APIRouter(tags=["Auth"])
 
 
 class AdminLoginInput(BaseModel):

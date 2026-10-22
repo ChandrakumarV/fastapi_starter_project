@@ -14,7 +14,7 @@ from fastapi_starter_project.schemas.user import (
 )
 from fastapi_starter_project.services.user_service import user_service
 
-router = APIRouter(dependencies=[Depends(require_platform_admin)], tags=["Platform Users"])
+router = APIRouter(dependencies=[Depends(require_platform_admin)], tags=["Users"])
 
 PLATFORM_ROLES = (
     UserRole.PLATFORM_ADMIN.value,

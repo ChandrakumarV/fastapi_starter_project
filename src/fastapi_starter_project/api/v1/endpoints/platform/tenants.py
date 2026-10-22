@@ -17,7 +17,7 @@ from fastapi_starter_project.services.user_service import user_service
 
 router = APIRouter(
     prefix="/tenants",
-    tags=["Tenant Management"],
+    tags=["Tenants Management"],
     dependencies=[Depends(require_platform_access)],
 )
 
