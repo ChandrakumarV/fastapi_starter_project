@@ -1,18 +1,48 @@
 # FastAPI Starter Project
 
-A production-grade template for building high-performance APIs with [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy 2.0](https://www.sqlalchemy.org/), [Alembic](https://alembic.sqlalchemy.org/), and [uv](https://docs.astral.sh/uv/).
+A production-grade, multi-tenant backend built with [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy 2.0](https://www.sqlalchemy.org/), [PostgreSQL](https://www.postgresql.org/), [Redis](https://redis.io/), [Alembic](https://alembic.sqlalchemy.org/), and [uv](https://docs.astral.sh/uv/).
 
 ---
 
 ## 🚀 Features
 
-- **Clean Layered Architecture**: Modular separation of concerns (Core, Models, Schemas, Services, API Endpoints, Dependencies).
-- **PostgreSQL Database**: Async database sessions powered by `SQLAlchemy 2.0` and `asyncpg`.
-- **Database Migrations with Alembic**: Fully configured async schema migrations with autogenerate capabilities.
-- **Cookie-Based JWT Authentication**: Secure HTTP-only cookies (`access_token`) with role management.
-- **Type-Safe Configuration**: Strongly typed settings via `pydantic-settings` reading from `.env`.
-- **Docker Compose**: Pre-configured PostgreSQL service ready for instant local development.
-- **Automated Testing Suite**: Integration test suite using `pytest`.
+- **Multi-Tenant Architecture**: Strict tenant data isolation with dedicated tenant entities and scoped user administration.
+- **Hierarchical Role-Based Access Control (RBAC)**: Fine-grained permissions cleanly distinguishing Platform Admins, Platform Users, Tenant Admins, and Tenant Users.
+- **Sub-Millisecond Redis Session Caching**: Requests are authenticated directly from Redis memory in ~0.2ms, completely eliminating redundant PostgreSQL lookups on every single request.
+- **Instant Session Invalidation**: Immediate session termination across user profile edits, password resets, soft deletes, and tenant deactivations.
+- **PostgreSQL Database**: High-performance asynchronous database operations powered by `SQLAlchemy 2.0` and `asyncpg` with secure UUID primary keys.
+- **Alembic Database Migrations**: Fully configured async schema migrations with automated generation capabilities.
+- **Cookie & Bearer Token Authentication**: Dual-mode authentication supporting secure HTTP-only cookies (`access_token`) and `Authorization: Bearer <token>` headers.
+- **Docker Compose**: Pre-configured multi-container environment with PostgreSQL and Redis for instant local development.
+- **Automated Testing Suite**: Full integration test suite using `pytest` and `anyio`.
+
+---
+
+## 👥 Role Hierarchy & Authorization Matrix
+
+The platform defines four standard user roles in `fastapi_starter_project.models.enums.UserRole`:
+
+| Role | Description | Scope |
+| :--- | :--- | :--- |
+| **`platform_admin`** | Top-level platform administrator. Full system and platform user control. | Global |
+| **`platform_user`** | Platform operator staff user. Manages tenants and tenant users across the platform. | Global |
+| **`tenant_admin`** | Administrator of a specific tenant organization. Manages users within their assigned tenant. | Tenant-Scoped |
+| **`tenant_user`** | Standard member of a tenant organization. | Tenant-Scoped |
+
+### Access Control Matrix
+
+| Resource / Endpoint | `platform_admin` | `platform_user` | `tenant_admin` | `tenant_user` |
+| :--- | :---: | :---: | :---: | :---: |
+| **Platform Users** (`/platform/users`) | ✅ Full Access | ❌ Forbidden (403) | ❌ Forbidden (403) | ❌ Forbidden (403) |
+| **Tenants** (`/platform/tenants`) | ✅ Full Access | ✅ Full Access | ❌ Forbidden (403) | ❌ Forbidden (403) |
+| **Tenant Users** (`/platform/tenants/{id}/users`) | ✅ Full Access | ✅ Full Access | ✅ Own Tenant Only | ❌ Forbidden (403) |
+| **Platform Login** (`/platform/login`) | ✅ Allowed | ✅ Allowed | ✅ Allowed | ❌ Forbidden (403) |
+| **Platform Me** (`/platform/me`) | ✅ Allowed | ✅ Allowed | ❌ Forbidden (403) | ❌ Forbidden (403) |
+
+> [!NOTE]
+> - **Platform Users**: Can **only** be managed by `platform_admin`.
+> - **Tenants & Tenant Users**: Can be managed by both `platform_admin` and `platform_user`.
+> - **Tenant Admins**: Can manage tenant users **strictly within their own tenant**. Cross-tenant management is forbidden (403).
 
 ---
 
@@ -22,46 +52,55 @@ A production-grade template for building high-performance APIs with [FastAPI](ht
 fastapi_starter_project/
 ├── .env.example                          # Environment variables template
 ├── .env                                  # Local environment configuration (git-ignored)
-├── .gitignore                            # Standard Python, uv, and environment ignores
-├── docker-compose.yml                    # PostgreSQL container setup
+├── docker-compose.yml                    # PostgreSQL & Redis container setup
 ├── alembic.ini                           # Alembic migration configuration
 ├── pyproject.toml                        # Project metadata, dependencies, scripts
 ├── uv.lock                               # Dependency lockfile
-├── README.md                             # Documentation & Migration Guide
-├── migrations/                           # Alembic migration files
-│   ├── env.py                            # Async Alembic environment runner
-│   └── versions/                         # Generated database migration scripts
+├── README.md                             # Documentation
+├── migrations/                           # Alembic database migrations
+│   ├── env.py                            # Async migration runner
+│   └── versions/                         # Versioned migration scripts
 ├── src/
 │   ├── main.py                           # App entrypoint shim for FastAPI CLI
 │   └── fastapi_starter_project/
-│       ├── __init__.py                   # Package exports and CLI runner
 │       ├── main.py                       # App factory, lifespan, CORS, and routing
 │       ├── core/
 │       │   ├── config.py                 # Pydantic BaseSettings & connection URIs
 │       │   ├── database.py               # Async engine, sessionmaker, and get_db dependency
-│       │   ├── security.py               # JWT encoding/decoding and password verification
-│       │   ├── dependencies.py           # Dependency injection (get_current_user)
+│       │   ├── redis.py                  # Async Redis connection pool and client
+│       │   ├── security.py               # JWT encoding/decoding and PBKDF2 password hashing
+│       │   ├── dependencies.py           # Dependency injection & RBAC validators
 │       │   └── init_db.py                # Database seeding script
 │       ├── models/                       # SQLAlchemy ORM models
-│       │   ├── base.py                   # Base declarative class
-│       │   └── user.py                   # User database model
+│       │   ├── base.py                   # Declarative base class
+│       │   ├── enums.py                  # UserRole enum definitions
+│       │   ├── tenant.py                 # Tenant model
+│       │   └── user.py                   # User model (with tenant relationships & audit fields)
 │       ├── schemas/                      # Pydantic validation schemas
-│       │   ├── auth.py                   # Login & token payload schemas
-│       │   ├── user.py                   # User response schemas
-│       │   └── common.py                 # Health and generic message schemas
+│       │   ├── common.py                 # Health and generic message schemas
+│       │   ├── tenant.py                 # Tenant create, update, patch, and response schemas
+│       │   ├── tenant_user.py            # Tenant user management schemas
+│       │   └── user.py                   # Platform user & admin schemas
 │       ├── services/                     # Business logic and database access layer
-│       │   └── user_service.py           # User retrieval & authentication logic
+│       │   ├── session_service.py        # Redis session tracking and invalidation
+│       │   ├── tenant_service.py         # Multi-tenant operations & lifecycle logic
+│       │   └── user_service.py           # User management and authentication logic
 │       └── api/
 │           └── v1/
-│               ├── router.py             # API v1 aggregator router
-│               └── endpoints/
-│                   ├── health.py         # Public /health endpoint
-│                   ├── auth.py           # Public /login and /logout endpoints
-│                   └── users.py          # Protected /me endpoint
+│               ├── endpoints/
+│               │   ├── health.py         # Public /health endpoint
+│               │   └── platform/         # Platform endpoints (/platform/...)
+│               │       ├── auth.py       # /platform/login, /platform/logout
+│               │       ├── me.py         # /platform/me profile management
+│               │       ├── users.py      # /platform/users platform admin/user management
+│               │       ├── tenants.py    # /platform/tenants tenant management
+│               │       └── tenant_users.py # /platform/tenants/{id}/users user management
+│               └── router.py             # API router aggregator
 └── tests/
     ├── conftest.py                       # Test fixtures and TestClient setup
     ├── test_health.py                    # Health check integration tests
-    ├── test_auth.py                      # Auth & protected route tests
+    ├── test_admin.py                     # Platform admin & auth tests
+    ├── test_tenant.py                    # Multi-tenant & multi-role authorization tests
     └── test_db.py                        # Database connectivity tests
 ```
 
@@ -72,14 +111,13 @@ fastapi_starter_project/
 ### 1. Prerequisites
 
 - **Python**: `>= 3.12`
-- **uv**: Modern Python package installer ([Install uv](https://docs.astral.sh/uv/getting-started/installation/))
-- **Docker**: For running the PostgreSQL database container
+- **uv**: Fast Python package manager ([Install uv](https://docs.astral.sh/uv/getting-started/installation/))
+- **Docker**: For running PostgreSQL and Redis containers
 
 ### 2. Environment Setup
 
-Clone the repository and set up your `.env` file:
-
 ```bash
+# Clone the repository
 git clone https://github.com/ChandrakumarV/fastapi_starter_project.git
 cd fastapi_starter_project
 
@@ -92,101 +130,26 @@ uv sync
 
 ---
 
-## 🗄️ Database Setup (PostgreSQL)
+## 🗄️ Database & Services (PostgreSQL & Redis)
 
-The project is configured for PostgreSQL with the following default credentials:
-
-| Variable | Value |
-| :--- | :--- |
-| `POSTGRES_SERVER` | `localhost` |
-| `POSTGRES_PORT` | `5432` |
-| `POSTGRES_USER` | `root` |
-| `POSTGRES_PASSWORD` | `root` |
-| `POSTGRES_DB` | `postgres` |
-
-### Start PostgreSQL with Docker
-
-You can spin up the PostgreSQL container in the background using `docker compose`:
+Start PostgreSQL and Redis in the background using `docker compose`:
 
 ```bash
-# Start PostgreSQL container
 docker compose up -d
 ```
 
-*(Alternatively, if running standalone `docker run`:)*
-```bash
-docker run -d --name postgresql -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=root -e POSTGRES_DB=postgres postgres:17-alpine
-```
-
----
-
-## 🔄 Database Migrations Guide (Alembic)
-
-### What is a Migration?
-
-When you modify your SQLAlchemy models in Python (for example, adding a new column or table), your database does not change automatically. 
-
-**Migrations** act as **version control for your database**. Alembic inspects your Python models, compares them with the live database schema, generates a migration script with the difference, and applies those changes safely without losing data.
-
----
-
-### Core Migration Commands Cheat Sheet
-
-| Task | Command | Description |
-| :--- | :--- | :--- |
-| **Apply pending migrations** | `uv run alembic upgrade head` | Updates database schema to the latest version |
-| **Create a new migration** | `uv run alembic revision --autogenerate -m "your_message"` | Generates a new migration script by detecting model changes |
-| **Check current database version** | `uv run alembic current` | Displays the current revision applied to the database |
-| **View migration history** | `uv run alembic history --verbose` | Lists all migrations in chronological order |
-| **Rollback last migration** | `uv run alembic downgrade -1` | Undoes the single most recent migration |
-| **Rollback completely** | `uv run alembic downgrade base` | Reverts all migrations back to an empty database |
-
----
-
-### Step-by-Step Guide for Beginners
-
-#### Step 1: Apply Initial Migrations
-
-To apply existing migrations and create the tables in your PostgreSQL database:
+### Apply Migrations
 
 ```bash
 uv run alembic upgrade head
 ```
 
-#### Step 2: Seed Initial Data (Optional)
+### Seed Initial Data
 
-Populate default users (`admin` and `user`) into the `users` table:
-
-```bash
-uv run python src/fastapi_starter_project/core/init_db.py
-```
-
-#### Step 3: Making Changes to Database Models
-
-Whenever you want to add a new table or modify a column:
-
-1. **Edit or add your SQLAlchemy model** inside `src/fastapi_starter_project/models/` (e.g., adding `bio: Mapped[str] = mapped_column(String(255), nullable=True)` to `models/user.py`).
-2. **Generate the migration script automatically**:
-   ```bash
-   uv run alembic revision --autogenerate -m "add bio to user model"
-   ```
-3. **Inspect the generated script** inside `migrations/versions/`. Alembic will have created a new Python file containing `upgrade()` and `downgrade()` functions.
-4. **Apply the migration to PostgreSQL**:
-   ```bash
-   uv run alembic upgrade head
-   ```
-5. **Verify the change**:
-   ```bash
-   uv run alembic current
-   ```
-
-#### Step 4: Undoing a Mistake (Rollback)
-
-If something went wrong with your latest migration:
+Populates the default platform admin, an initial tenant (`ABC Exports`), a tenant administrator, and a tenant user:
 
 ```bash
-# Revert the last applied migration
-uv run alembic downgrade -1
+uv run python -c "import sys; sys.path.insert(0, 'src'); from fastapi_starter_project.core.init_db import seed_initial_data; import asyncio; asyncio.run(seed_initial_data())"
 ```
 
 ---
@@ -204,17 +167,11 @@ The application will be accessible at:
 - **Interactive Swagger Docs**: `http://127.0.0.1:8000/docs`
 - **ReDoc**: `http://127.0.0.1:8000/redoc`
 
-### Production Mode
-
-```bash
-uv run fastapi run
-```
-
 ---
 
 ## 🧪 Running Automated Tests
 
-Run the full automated test suite (including health endpoints, auth flows, and database queries):
+Run the full integration test suite:
 
 ```bash
 uv run pytest
@@ -224,59 +181,85 @@ uv run pytest
 
 ## 🔌 API Endpoints Summary
 
-### 1. System Health (Unversioned)
+### 1. System Health
 
 | Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/health` | Server status and PostgreSQL database connectivity | Public |
+| `GET` | `/health` | Server status and database connectivity | Public |
 | `GET` | `/` | Redirects to Swagger UI documentation | Public |
 | `GET` | `/docs` | Interactive Swagger UI | Public |
 | `GET` | `/redoc` | Interactive ReDoc | Public |
 
-### 2. Normal User Endpoints (Public & Protected)
+### 2. Platform Authentication (`/platform`)
 
-| Method | Actual Path | Docs Display | Description | Access |
-| :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/auth/check-username` | `/auth/check-username` | Check if username is available (real-time) | Public |
-| `POST` | `/api/v1/auth/register` | `/auth/register` | Self-registration (grants `user` role) | Public |
-| `POST` | `/api/v1/auth/login` | `/auth/login` | Authenticate & issue HTTP-only JWT cookie | Public |
-| `DELETE` | `/api/v1/auth/logout` | `/auth/logout` | Clear JWT authentication cookie | Public |
-| `GET` | `/api/v1/me` | `/me` | Get currently logged-in user profile | Protected (`user` only) |
-| `PUT` | `/api/v1/me` | `/me` | Update personal profile (name, email, password) | Protected (`user` only) |
-| `DELETE` | `/api/v1/me` | `/me` | Delete own user account | Protected (`user` only) |
-
-### 3. Admin Endpoints (`/admin` Prefix, Protected by `require_admin`)
-
-| Method | Actual Path | Docs Display | Description | Access |
-| :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/admin/auth/check-username` | `/admin/auth/check-username` | Check username availability for admin | Public |
-| `POST` | `/api/v1/admin/auth/login` | `/admin/auth/login` | Admin login (rejects non-admin users) | Public (checks admin role) |
-| `DELETE` | `/api/v1/admin/auth/logout` | `/admin/auth/logout` | Clear admin session cookie | Public |
-| `GET` | `/api/v1/admin/me` | `/admin/me` | Get current admin profile | Protected (`admin` only) |
-| `PUT` | `/api/v1/admin/me` | `/admin/me` | Update current admin profile | Protected (`admin` only) |
-| `DELETE` | `/api/v1/admin/me` | `/admin/me` | Soft delete current admin account | Protected (`admin` only) |
-| `POST` | `/api/v1/admin/users` | `/admin/users` | Create new users with any role (`admin` or `user`) | Protected (`admin` only) |
-| `GET` | `/api/v1/admin/users` | `/admin/users` | List all users in system (excluding deleted by default) | Protected (`admin` only) |
-| `GET` | `/api/v1/admin/users/{user_id}` | `/admin/users/{user_id}` | Get user details by ID | Protected (`admin` only) |
-| `PATCH` | `/api/v1/admin/users/{user_id}/status` | `/admin/users/{user_id}/status` | Activate or deactivate normal user (`{"is_active": bool}`) | Protected (`admin` only) |
-| `DELETE` | `/api/v1/admin/users/{user_id}` | `/admin/users/{user_id}` | Soft delete user (sets `is_deleted=True` & `deleted_at`) | Protected (`admin` only) |
-
-### 4. Account Lifecycle & Status Behavior
-
-| State | `is_active` | `is_deleted` | Login Attempt Result |
+| Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
-| **Active** | `True` | `False` | `200 OK` (JWT issued) |
-| **Inactive / Suspended** | `False` | `False` | `403 Forbidden` (`"Inactive user account. Please contact an administrator."`) |
-| **Soft-Deleted** | Any | `True` | `404 Not Found` (`"User not found."`) |
+| `POST` | `/platform/login` | Authenticates administrator credentials and sets an HTTP-only JWT cookie with cached session | Public (`platform_admin`, `platform_user`, `tenant_admin`) |
+| `DELETE` | `/platform/logout` | Clears the JWT authentication cookie and revokes session | Public |
+| `GET` | `/platform/me` | Fetches currently authenticated platform profile | Protected (`require_platform_access`) |
+| `PUT` | `/platform/me` | Updates current platform user profile | Protected (`require_platform_access`) |
+| `DELETE` | `/platform/me` | Soft deletes current platform user account | Protected (`require_platform_access`) |
+
+### 3. Platform Users (`/platform/users`)
+
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/platform/users` | Create platform accounts (`platform_admin` or `platform_user`) | `platform_admin` only |
+| `GET` | `/platform/users` | List platform admin users | `platform_admin` only |
+| `GET` | `/platform/users/{user_id}` | Get platform admin user details | `platform_admin` only |
+| `PATCH` | `/platform/users/{user_id}/status` | Activate or deactivate platform accounts | `platform_admin` only |
+| `DELETE` | `/platform/users/{user_id}` | Soft delete platform accounts | `platform_admin` only |
+
+### 4. Tenants (`/platform/tenants`)
+
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/platform/tenants` | Create tenant and provision initial tenant administrator atomically | `platform_admin`, `platform_user` |
+| `GET` | `/platform/tenants` | List active tenants (paginated) | `platform_admin`, `platform_user` |
+| `GET` | `/platform/tenants/{tenant_id}` | Get tenant details | `platform_admin`, `platform_user` |
+| `PUT` | `/platform/tenants/{tenant_id}` | Update tenant details | `platform_admin`, `platform_user` |
+| `PATCH` | `/platform/tenants/{tenant_id}` | Update tenant active status or verification (deactivation invalidates tenant sessions) | `platform_admin`, `platform_user` |
+| `DELETE` | `/platform/tenants/{tenant_id}` | Soft delete tenant and invalidate all tenant user sessions | `platform_admin`, `platform_user` |
+
+### 5. Tenant Users (`/platform/tenants/{tenant_id}/users`)
+
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/platform/tenants/{tenant_id}/users` | Provision new user or administrator within tenant | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
+| `GET` | `/platform/tenants/{tenant_id}/users` | List active users in tenant (`?deleted_users=true` for deleted) | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
+| `GET` | `/platform/tenants/{tenant_id}/users/{user_id}` | Get tenant user details | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
+| `PUT` | `/platform/tenants/{tenant_id}/users/{user_id}` | Update tenant user profile (revokes active sessions) | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
+| `PATCH` | `/platform/tenants/{tenant_id}/users/{user_id}` | Change user password or status (revokes active sessions) | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
+| `DELETE` | `/platform/tenants/{tenant_id}/users/{user_id}` | Soft delete user and revoke all active sessions | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
 
 ---
 
-## 🔑 Test Credentials (Default Database Users)
+## ⚡ Redis Session Caching & Invalidation Architecture
 
-| Username | Password | Role | Allowed Endpoints |
+### Fast-Path Caching (Sub-Millisecond Auth)
+When an administrator logs in, a session payload is generated and saved in Redis under `session:{session_id}` storing the user's ID, username, email, role, and tenant metadata. On every incoming request:
+1. The JWT is validated in memory.
+2. The active session payload is retrieved from Redis in **~0.2ms**.
+3. The user representation is instantiated directly **without executing SQL queries against PostgreSQL**.
+
+### Instant Invalidation
+Because active sessions live in Redis, any security event invalidates the session keys immediately:
+1. **User Logout**: Deletes `session:{session_id}`.
+2. **Password Change or Profile Update**: Invokes `session_service.invalidate_user_sessions(user_id)`.
+3. **User Deactivation / Soft-Deletion**: Immediately revokes all active sessions for that user.
+4. **Tenant Deactivation / Soft-Deletion**: Invokes `session_service.invalidate_tenant_sessions(tenant_id)`, revoking sessions across every user in the tenant organization.
+
+---
+
+## 🔑 Default Seed Credentials
+
+After running database seed:
+
+| Username | Password | Role | Scope |
 | :--- | :--- | :--- | :--- |
-| `admin` | `password123` | **admin** | All Admin (`/admin/...`) & User (`/...`) endpoints |
-| `user` | `password456` | **user** | User endpoints (`/auth/login`, `/me`, etc.) |
+| `admin` | `password123` | `platform_admin` | Global Platform Admin |
+| `abc_admin` | `password` | `tenant_admin` | Tenant Admin (`ABC Exports`) |
+| `abc_user` | `password` | `tenant_user` | Tenant User (`ABC Exports`) |
 
 ---
 

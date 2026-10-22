@@ -1,42 +1,105 @@
 import asyncio
+import uuid
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.database import async_session_maker
-from fastapi_starter_project.core.security import verify_password
+from fastapi_starter_project.core.security import get_password_hash
+from fastapi_starter_project.models.enums import UserRole
+from fastapi_starter_project.models.tenant import Tenant
 from fastapi_starter_project.models.user import User
 
 
 async def seed_initial_data() -> None:
-    """Seed initial admin and test users if they do not exist."""
-    initial_users = [
-        {
-            "username": "admin",
-            "email": "admin@example.com",
-            "full_name": "Admin User",
-            "role": "admin",
-            "is_active": True,
-            "hashed_password": "password123",
-        },
-        {
-            "username": "user",
-            "email": "user@example.com",
-            "full_name": "Normal User",
-            "role": "user",
-            "is_active": True,
-            "hashed_password": "password456",
-        },
-    ]
-
+    """Seed initial platform super admin, sample tenant, and tenant users."""
     async with async_session_maker() as session:
-        for user_data in initial_users:
-            stmt = select(User).where(User.username == user_data["username"])
-            existing = (await session.execute(stmt)).scalar_one_or_none()
-            if not existing:
-                new_user = User(**user_data)
-                session.add(new_user)
-                print(f"[Seed] Created user: {user_data['username']}")
-            else:
-                print(f"[Seed] User already exists: {user_data['username']}")
+        # 1. Platform Admin
+        admin_stmt = select(User).where(User.user_name == "admin")
+        super_admin = (await session.execute(admin_stmt)).scalar_one_or_none()
+        if not super_admin:
+            admin_id = uuid.uuid4()
+            super_admin = User(
+                id=admin_id,
+                name="Platform Admin",
+                user_name="admin",
+                email="admin@example.com",
+                phone="9876543200",
+                role=UserRole.PLATFORM_ADMIN.value,
+                is_active=True,
+                created_by_id=admin_id,
+                hashed_password=get_password_hash("password"),
+            )
+            session.add(super_admin)
+            await session.flush()
+            print("[Seed] Created platform_admin: admin")
+        else:
+            super_admin.role = UserRole.PLATFORM_ADMIN.value
+            if not super_admin.created_by_id or super_admin.created_by_id != super_admin.id:
+                super_admin.created_by_id = super_admin.id
+            await session.flush()
+            print("[Seed] platform_admin updated")
+
+        # 2. Sample Tenant
+        tenant_stmt = select(Tenant).where(Tenant.name == "ABC Exports")
+        tenant = (await session.execute(tenant_stmt)).scalar_one_or_none()
+        if not tenant:
+            tenant = Tenant(
+                id=uuid.uuid4(),
+                name="ABC Exports",
+                phone_no="9876543210",
+                email="contact@example.com",
+                address="123 Main Road",
+                district="Karur",
+                pincode=639001,
+                is_verified=True,
+                is_active=True,
+            )
+            session.add(tenant)
+            await session.flush()
+            print(f"[Seed] Created sample tenant: {tenant.name} (id={tenant.id})")
+        else:
+            print(f"[Seed] Tenant {tenant.name} already exists")
+
+        # 3. Tenant Admin
+        t_admin_stmt = select(User).where(User.user_name == "abc_admin")
+        t_admin = (await session.execute(t_admin_stmt)).scalar_one_or_none()
+        if not t_admin:
+            t_admin = User(
+                id=uuid.uuid4(),
+                tenant_id=tenant.id,
+                name="Tenant Admin",
+                user_name="abc_admin",
+                email="tenant_admin@example.com",
+                phone="9876543211",
+                role=UserRole.TENANT_ADMIN.value,
+                is_active=True,
+                created_by_id=super_admin.id,
+                hashed_password=get_password_hash("password"),
+            )
+            session.add(t_admin)
+            print("[Seed] Created tenant_admin: abc_admin")
+        else:
+            print("[Seed] tenant_admin already exists")
+
+        # 4. Tenant User
+        t_user_stmt = select(User).where(User.user_name == "abc_user")
+        t_user = (await session.execute(t_user_stmt)).scalar_one_or_none()
+        if not t_user:
+            t_user = User(
+                id=uuid.uuid4(),
+                tenant_id=tenant.id,
+                name="Tenant User",
+                user_name="abc_user",
+                email="tenant_user@example.com",
+                phone="9876543212",
+                role=UserRole.TENANT_USER.value,
+                is_active=True,
+                created_by_id=t_admin.id if t_admin else super_admin.id,
+                hashed_password=get_password_hash("password"),
+            )
+            session.add(t_user)
+            print("[Seed] Created tenant_user: abc_user")
+        else:
+            print("[Seed] tenant_user already exists")
+
         await session.commit()
     print("[Seed] Seeding completed.")
 

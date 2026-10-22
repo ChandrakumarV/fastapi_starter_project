@@ -20,8 +20,15 @@ class UsernameAvailabilityResponse(BaseModel):
     message: str = Field(..., examples=["Username is available."])
 
 
+class AdminLoginRequest(BaseModel):
+    email_or_username: str = Field(..., min_length=3, examples=["admin@example.com"])
+    password: str = Field(..., min_length=4, examples=["password"])
+
+
 class TokenPayload(BaseModel):
     sub: str
     role: str | None = None
+    tenant_id: str | None = None
+    session_id: str | None = None
     exp: datetime
     iat: datetime

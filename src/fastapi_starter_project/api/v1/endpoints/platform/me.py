@@ -3,50 +3,50 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.config import settings
 from fastapi_starter_project.core.database import get_db
-from fastapi_starter_project.core.dependencies import require_user
+from fastapi_starter_project.core.dependencies import require_platform_access
 from fastapi_starter_project.schemas.common import MessageResponse
 from fastapi_starter_project.schemas.user import UserInDB, UserResponse, UserUpdate
 from fastapi_starter_project.services.user_service import user_service
 
-router = APIRouter(dependencies=[Depends(require_user)], tags=["Profile"])
+router = APIRouter(dependencies=[Depends(require_platform_access)], tags=["Platform Profile"])
 
 
 @router.get(
     "/me",
     response_model=UserResponse,
-    summary="Get current user profile",
-    description="Returns the profile of the currently authenticated user.",
+    summary="Get admin profile",
+    description="Returns the profile of the authenticated admin user.",
 )
-async def get_current_user_profile(
-    current_user: Annotated[UserInDB, Depends(require_user)],
+async def get_admin_profile(
+    current_admin: Annotated[UserInDB, Depends(require_platform_access)],
 ) -> UserResponse:
-    return UserResponse.model_validate(current_user)
+    return UserResponse.model_validate(current_admin)
 
 
 @router.put(
     "/me",
     response_model=UserResponse,
-    summary="Update current user profile",
-    description="Updates personal profile fields (full_name, email, password) for the authenticated user.",
+    summary="Update admin profile",
+    description="Updates profile details (full_name, email, password) for the current admin.",
 )
-async def update_current_user_profile(
+async def update_admin_profile(
     update_data: UserUpdate,
-    current_user: Annotated[UserInDB, Depends(require_user)],
+    current_admin: Annotated[UserInDB, Depends(require_platform_access)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserResponse:
-    if update_data.email and update_data.email != current_user.email:
+    if update_data.email and update_data.email != current_admin.email:
         existing = await user_service.get_by_email(db, update_data.email)
-        if existing and existing.id != current_user.id:
+        if existing and existing.id != current_admin.id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Email is already taken by another account.",
             )
 
-    updated_user = await user_service.update_user(db, current_user.id, update_data)
+    updated_user = await user_service.update_user(db, current_admin.id, update_data)
     if not updated_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
+            detail="Admin user not found.",
         )
     return UserResponse.model_validate(updated_user)
 
@@ -54,19 +54,19 @@ async def update_current_user_profile(
 @router.delete(
     "/me",
     response_model=MessageResponse,
-    summary="Delete current user account",
-    description="Deletes the authenticated user's account and clears session cookie.",
+    summary="Delete admin account",
+    description="Soft deletes the current admin's account and clears session cookie.",
 )
-async def delete_current_user_account(
+async def delete_admin_profile(
     response: Response,
-    current_user: Annotated[UserInDB, Depends(require_user)],
+    current_admin: Annotated[UserInDB, Depends(require_platform_access)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
-    success = await user_service.delete_user(db, current_user.id)
+    success = await user_service.delete_user(db, current_admin.id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
+            detail="Admin user not found.",
         )
 
     response.delete_cookie(
@@ -76,4 +76,4 @@ async def delete_current_user_account(
         secure=settings.COOKIE_SECURE,
         path="/",
     )
-    return MessageResponse(message="User account deleted successfully.")
+    return MessageResponse(message="Admin account deleted successfully.")

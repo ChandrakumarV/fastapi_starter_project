@@ -1,61 +1,48 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.config import settings
 from fastapi_starter_project.core.database import get_db
 from fastapi_starter_project.core.security import create_access_token, verify_password
-from fastapi_starter_project.schemas.auth import LoginRequest, UsernameAvailabilityResponse
+from fastapi_starter_project.models.enums import UserRole
 from fastapi_starter_project.schemas.common import MessageResponse
+from fastapi_starter_project.services.session_service import session_service
 from fastapi_starter_project.services.user_service import user_service
 
-router = APIRouter(prefix="/auth", tags=["Admin Auth"])
+router = APIRouter(tags=["Admin Auth"])
 
 
-@router.get(
-    "/check-username",
-    response_model=UsernameAvailabilityResponse,
-    summary="Check username availability (Admin)",
-    description="Real-time check to verify whether a username is available before creating an admin or user account.",
-)
-async def check_admin_username_availability(
-    username: Annotated[
-        str,
-        Query(
-            min_length=3,
-            max_length=50,
-            description="The username to check availability for",
-            examples=["newadmin"],
-        ),
-    ],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> UsernameAvailabilityResponse:
-    existing_user = await user_service.get_by_username(db, username)
-    if existing_user and not existing_user.is_deleted:
-        return UsernameAvailabilityResponse(
-            username=username,
-            available=False,
-            message=f"Username '{username}' is already taken.",
-        )
-
-    return UsernameAvailabilityResponse(
-        username=username,
-        available=True,
-        message=f"Username '{username}' is available.",
+class AdminLoginInput(BaseModel):
+    email_or_username: str | None = Field(
+        default=None, examples=["admin@example.com"]
     )
+    username: str | None = Field(default=None, examples=["admin"])
+    password: str = Field(..., min_length=4, examples=["password"])
+
+    @model_validator(mode="after")
+    def resolve_identifier(self) -> "AdminLoginInput":
+        if not self.email_or_username and not self.username:
+            raise ValueError("email_or_username or username must be provided.")
+        return self
+
+    @property
+    def identifier(self) -> str:
+        return self.email_or_username or self.username or ""
 
 
 @router.post(
     "/login",
     response_model=MessageResponse,
     summary="Admin login",
-    description="Authenticates admin credentials and sets an HTTP-only JWT cookie.",
+    description="Authenticates platform admin credentials and sets an HTTP-only JWT cookie.",
 )
 async def admin_login(
-    credentials: LoginRequest,
+    credentials: AdminLoginInput,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
-    user = await user_service.get_by_username(db, credentials.username)
+    user = await user_service.get_by_email_or_username(db, credentials.identifier)
     if user and user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -69,7 +56,12 @@ async def admin_login(
         )
 
     role_value = user.role.value if hasattr(user.role, "value") else str(user.role)
-    if role_value != "admin":
+    allowed_roles = (
+        UserRole.PLATFORM_ADMIN.value,
+        UserRole.PLATFORM_USER.value,
+        UserRole.TENANT_ADMIN.value,
+    )
+    if role_value not in allowed_roles and (not user.created_by_id or user.created_by_id != user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required to access this endpoint.",
@@ -81,7 +73,26 @@ async def admin_login(
             detail="Inactive admin account. Please contact system support.",
         )
 
-    token = create_access_token(subject=user.username, role=user.role)
+    # Cache user profile directly in Redis session for sub-millisecond authentication
+    session_id = await session_service.create_session(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        role=role_value,
+        extra_data={
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "created_by_id": str(user.created_by_id) if user.created_by_id else None,
+            "is_active": user.is_active,
+        },
+    )
+
+    token = create_access_token(
+        subject=user.username,
+        role=user.role,
+        tenant_id=str(user.tenant_id) if user.tenant_id else None,
+        session_id=session_id,
+    )
 
     max_age_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     response.set_cookie(
@@ -102,9 +113,9 @@ async def admin_login(
     "/logout",
     response_model=MessageResponse,
     summary="Admin logout",
-    description="Clears the HTTP-only JWT authentication cookie for admin session.",
+    description="Clears the HTTP-only JWT authentication cookie for the admin session.",
 )
-def admin_logout(response: Response) -> MessageResponse:
+async def admin_logout(response: Response) -> MessageResponse:
     response.delete_cookie(
         key=settings.COOKIE_NAME,
         httponly=True,

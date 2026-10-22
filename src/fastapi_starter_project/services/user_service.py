@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import select
+import uuid
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.security import get_password_hash, verify_password
 from fastapi_starter_project.models.user import User
@@ -7,18 +8,17 @@ from fastapi_starter_project.schemas.user import UserInDB, UserUpdate
 
 
 class UserService:
-    """
-    User service handling user database operations with PostgreSQL.
-    Implements soft deletion and active status management.
-    """
+    """User service handling user database operations with PostgreSQL."""
 
     def _to_user_in_db(self, user: User) -> UserInDB:
         return UserInDB(
             id=user.id,
-            username=user.username,
+            username=user.user_name,
             email=user.email,
-            full_name=user.full_name,
+            full_name=user.name,
             role=user.role,
+            tenant_id=user.tenant_id,
+            created_by_id=user.created_by_id,
             is_active=user.is_active,
             is_deleted=user.is_deleted,
             deleted_at=user.deleted_at,
@@ -28,7 +28,7 @@ class UserService:
     async def get_by_username(
         self, db: AsyncSession, username: str
     ) -> UserInDB | None:
-        result = await db.execute(select(User).where(User.username == username))
+        result = await db.execute(select(User).where(User.user_name == username))
         db_user = result.scalar_one_or_none()
         if not db_user:
             return None
@@ -43,21 +43,40 @@ class UserService:
             return None
         return self._to_user_in_db(db_user)
 
-    async def get_by_id(
-        self, db: AsyncSession, user_id: int
+    async def get_by_email_or_username(
+        self, db: AsyncSession, identifier: str
     ) -> UserInDB | None:
-        result = await db.execute(select(User).where(User.id == user_id))
+        stmt = select(User).where(
+            or_(User.email == identifier, User.user_name == identifier)
+        )
+        db_user = (await db.execute(stmt)).scalar_one_or_none()
+        if not db_user:
+            return None
+        return self._to_user_in_db(db_user)
+
+    async def get_by_id(
+        self, db: AsyncSession, user_id: uuid.UUID | str
+    ) -> UserInDB | None:
+        u_id = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
+        result = await db.execute(select(User).where(User.id == u_id))
         db_user = result.scalar_one_or_none()
         if not db_user:
             return None
         return self._to_user_in_db(db_user)
 
     async def list_users(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100, include_deleted: bool = False
+        self,
+        db: AsyncSession,
+        skip: int = 0,
+        limit: int = 100,
+        include_deleted: bool = False,
+        roles: list[str] | None = None,
     ) -> list[UserInDB]:
         query = select(User)
         if not include_deleted:
             query = query.where(User.is_deleted == False)
+        if roles is not None:
+            query = query.where(User.role.in_(roles))
 
         result = await db.execute(query.offset(skip).limit(limit))
         db_users = result.scalars().all()
@@ -70,15 +89,20 @@ class UserService:
         email: str,
         full_name: str,
         password: str,
-        role: str = "user",
+        role: str = "tenant_user",
+        tenant_id: uuid.UUID | None = None,
+        created_by_id: uuid.UUID | None = None,
     ) -> UserInDB:
         hashed_pw = get_password_hash(password)
         new_user = User(
-            username=username,
+            id=uuid.uuid4(),
+            user_name=username,
             email=email,
-            full_name=full_name,
+            name=full_name,
             hashed_password=hashed_pw,
             role=role,
+            tenant_id=tenant_id,
+            created_by_id=created_by_id,
             is_active=True,
             is_deleted=False,
             deleted_at=None,
@@ -95,7 +119,7 @@ class UserService:
         password: str,
         required_role: str | None = None,
     ) -> UserInDB | None:
-        user = await self.get_by_username(db, username)
+        user = await self.get_by_email_or_username(db, username)
         if not user or user.is_deleted:
             return None
         if not verify_password(password, user.hashed_password):
@@ -105,15 +129,16 @@ class UserService:
         return user
 
     async def update_user(
-        self, db: AsyncSession, user_id: int, update_data: UserUpdate
+        self, db: AsyncSession, user_id: uuid.UUID | str, update_data: UserUpdate
     ) -> UserInDB | None:
-        result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
+        u_id = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
+        result = await db.execute(select(User).where(User.id == u_id, User.is_deleted == False))
         db_user = result.scalar_one_or_none()
         if not db_user:
             return None
 
         if update_data.full_name is not None:
-            db_user.full_name = update_data.full_name
+            db_user.name = update_data.full_name
         if update_data.email is not None:
             db_user.email = update_data.email
         if update_data.password is not None:
@@ -124,10 +149,10 @@ class UserService:
         return self._to_user_in_db(db_user)
 
     async def set_user_active_status(
-        self, db: AsyncSession, user_id: int, is_active: bool
+        self, db: AsyncSession, user_id: uuid.UUID | str, is_active: bool
     ) -> UserInDB | None:
-        """Allows administrators to activate or deactivate a user account."""
-        result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
+        u_id = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
+        result = await db.execute(select(User).where(User.id == u_id, User.is_deleted == False))
         db_user = result.scalar_one_or_none()
         if not db_user:
             return None
@@ -137,12 +162,9 @@ class UserService:
         await db.refresh(db_user)
         return self._to_user_in_db(db_user)
 
-    async def delete_user(self, db: AsyncSession, user_id: int) -> bool:
-        """
-        Performs a soft delete on the user. Never hard deletes rows.
-        Marks is_deleted as True and records deleted_at timestamp.
-        """
-        result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
+    async def delete_user(self, db: AsyncSession, user_id: uuid.UUID | str) -> bool:
+        u_id = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
+        result = await db.execute(select(User).where(User.id == u_id, User.is_deleted == False))
         db_user = result.scalar_one_or_none()
         if not db_user:
             return False
@@ -153,5 +175,4 @@ class UserService:
         return True
 
 
-# Singleton instance
 user_service = UserService()

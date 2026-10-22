@@ -37,7 +37,7 @@ venv.bak/
 !.env.example
 
 # IDEs & Editors
-.vscode/
+
 .idea/
 *.swp
 *.swo

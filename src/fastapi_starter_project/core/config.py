@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Redis & Session Management
+    REDIS_URL: str = "redis://localhost:6379/0"
+    SESSION_EXPIRE_SECONDS: int = 3600
+
     # Cookie Settings
     COOKIE_NAME: str = "access_token"
     COOKIE_SECURE: bool = False  # Set to True when HTTPS is used in production

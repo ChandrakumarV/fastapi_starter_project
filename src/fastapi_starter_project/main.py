@@ -9,6 +9,7 @@ from fastapi_starter_project.api.v1.endpoints import health
 from fastapi_starter_project.api.v1.router import api_v1_router
 from fastapi_starter_project.core.config import settings
 from fastapi_starter_project.core.database import async_engine
+from fastapi_starter_project.core.redis import close_redis, get_redis
 
 logger = logging.getLogger("fastapi_starter_project")
 
@@ -25,12 +26,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("Failed to connect to PostgreSQL: %s", exc)
         raise exc
 
+    try:
+        redis_client = get_redis()
+        await redis_client.ping()
+        logger.info("Redis connection established successfully.")
+    except Exception as exc:
+        logger.warning("Failed to connect to Redis: %s", exc)
+
     yield
 
     # --- Shutdown ---
     logger.info("Closing database connection pool...")
     await async_engine.dispose()
     logger.info("Database connection pool closed successfully.")
+
+    logger.info("Closing Redis connection pool...")
+    await close_redis()
+    logger.info("Redis connection pool closed successfully.")
 
 
 def create_application() -> FastAPI:
@@ -61,6 +73,10 @@ def create_application() -> FastAPI:
 
     # Mount unversioned public health endpoint: /health
     application.include_router(health.router, tags=["Health"])
+
+    # Mount /platform base prefix (Platform Management)
+    from fastapi_starter_project.api.v1.endpoints import platform
+    application.include_router(platform.router)
 
     # Mount versioned API router: /api/v1/...
     application.include_router(api_v1_router, prefix=settings.API_V1_STR)

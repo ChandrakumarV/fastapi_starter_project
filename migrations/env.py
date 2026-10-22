@@ -14,7 +14,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "src"))
 
 from fastapi_starter_project.core.config import settings
-from fastapi_starter_project.models import Base  # Loads all models
+from fastapi_starter_project.models.base import Base
+from fastapi_starter_project.models.tenant import Tenant
+from fastapi_starter_project.models.user import User
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

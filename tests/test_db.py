@@ -17,6 +17,6 @@ async def test_database_connection_and_user_query() -> None:
         assert user is not None
         assert user.username == "admin"
         assert user.email == "admin@example.com"
-        assert user.role == "admin"
+        assert user.role == "platform_admin"
 
     await test_engine.dispose()
