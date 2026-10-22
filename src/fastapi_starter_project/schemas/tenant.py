@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 class TenantCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, examples=["ABC Exports"])
-    phone_no: str = Field(..., min_length=7, max_length=20, examples=["9876543210"])
+    phone_no: str = Field(..., min_length=10, max_length=10, examples=["9876543210"])
     email: EmailStr = Field(..., examples=["contact@example.com"])
     address: str = Field(..., min_length=2, max_length=255, examples=["123 Main Road"])
     district: str = Field(..., min_length=2, max_length=100, examples=["Karur"])
@@ -15,7 +15,7 @@ class TenantCreate(BaseModel):
     user_name: str = Field(..., min_length=2, max_length=100, examples=["Tenant Admin"])
     user_id_name: str = Field(..., min_length=3, max_length=50, examples=["abc_admin"])
     user_email: EmailStr = Field(..., examples=["admin@example.com"])
-    user_phone: str = Field(..., min_length=7, max_length=20, examples=["9876543211"])
+    user_phone: str = Field(..., min_length=10, max_length=10, examples=["9876543211"])
     password: str = Field(..., min_length=6, examples=["password"])
     confirm_password: str = Field(..., min_length=6, examples=["password"])
 
@@ -28,7 +28,7 @@ class TenantCreate(BaseModel):
 
 class TenantUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=100)
-    phone_no: str | None = Field(default=None, min_length=7, max_length=20)
+    phone_no: str | None = Field(default=None, min_length=10, max_length=10)
     email: EmailStr | None = None
     address: str | None = Field(default=None, min_length=2, max_length=255)
     district: str | None = Field(default=None, min_length=2, max_length=100)

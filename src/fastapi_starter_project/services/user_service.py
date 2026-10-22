@@ -16,6 +16,7 @@ class UserService:
             username=user.user_name,
             email=user.email,
             full_name=user.name,
+            phone=user.phone,
             role=user.role,
             tenant_id=user.tenant_id,
             created_by_id=user.created_by_id,
@@ -92,6 +93,7 @@ class UserService:
         role: str = "tenant_user",
         tenant_id: uuid.UUID | None = None,
         created_by_id: uuid.UUID | None = None,
+        phone: str | None = None,
     ) -> UserInDB:
         hashed_pw = get_password_hash(password)
         new_user = User(
@@ -99,6 +101,7 @@ class UserService:
             user_name=username,
             email=email,
             name=full_name,
+            phone=phone,
             hashed_password=hashed_pw,
             role=role,
             tenant_id=tenant_id,
@@ -141,6 +144,8 @@ class UserService:
             db_user.name = update_data.full_name
         if update_data.email is not None:
             db_user.email = update_data.email
+        if update_data.phone is not None:
+            db_user.phone = update_data.phone
         if update_data.password is not None:
             db_user.hashed_password = get_password_hash(update_data.password)
 

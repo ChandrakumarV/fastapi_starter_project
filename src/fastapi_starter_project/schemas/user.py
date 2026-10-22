@@ -16,6 +16,7 @@ class UserBase(BaseModel):
     username: str = Field(..., examples=["admin"])
     email: EmailStr = Field(..., examples=["admin@example.com"])
     full_name: str = Field(..., examples=["Platform Admin"])
+    phone: str | None = Field(default=None, min_length=10, max_length=10, examples=["9876543200"])
     role: str = Field(default=UserRole.PLATFORM_USER.value, examples=[UserRole.PLATFORM_USER.value])
     created_by_id: uuid.UUID | None = None
     is_active: bool = Field(default=True, examples=[True])
@@ -32,6 +33,7 @@ class UserCreateAdmin(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, examples=["newuser"])
     email: EmailStr = Field(..., examples=["newuser@example.com"])
     full_name: str = Field(..., min_length=2, max_length=100, examples=["New Platform User"])
+    phone: str | None = Field(default=None, min_length=10, max_length=10, examples=["9876543200"])
     password: str = Field(..., min_length=6, examples=["securepassword123"])
     role: PlatformUserRole = Field(
         default=PlatformUserRole.PLATFORM_USER,
@@ -42,6 +44,7 @@ class UserCreateAdmin(BaseModel):
 class UserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=100, examples=["Updated Name"])
     email: EmailStr | None = Field(default=None, examples=["updated@example.com"])
+    phone: str | None = Field(default=None, min_length=10, max_length=10, examples=["9876543200"])
     password: str | None = Field(default=None, min_length=6, examples=["newsecurepassword123"])
 
 

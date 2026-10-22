@@ -15,7 +15,7 @@ class TenantUserCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, examples=["John Doe"])
     user_name: str = Field(..., min_length=3, max_length=50, examples=["john_doe"])
     email: EmailStr = Field(..., examples=["john@example.com"])
-    phone: str = Field(..., min_length=7, max_length=20, examples=["9876543212"])
+    phone: str = Field(..., min_length=10, max_length=10, examples=["9876543212"])
     role: Literal["tenant_admin", "tenant_user"] = Field(
         default="tenant_user", examples=["tenant_user"]
     )
@@ -34,7 +34,7 @@ class TenantUserUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=100)
     user_name: str | None = Field(default=None, min_length=3, max_length=50)
     email: EmailStr | None = None
-    phone: str | None = Field(default=None, min_length=7, max_length=20)
+    phone: str | None = Field(default=None, min_length=10, max_length=10)
     role: Literal["tenant_admin", "tenant_user"] | None = None
 
 

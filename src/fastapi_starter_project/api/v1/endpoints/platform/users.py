@@ -60,6 +60,7 @@ async def create_user_by_admin(
         password=user_in.password,
         role=role_val,
         created_by_id=current_admin.id,
+        phone=user_in.phone,
     )
     return UserResponse.model_validate(new_user)
 

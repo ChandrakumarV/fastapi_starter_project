@@ -319,3 +319,58 @@ def test_bearer_token_header_is_rejected(client: TestClient) -> None:
     # Must be rejected because only HTTP-only cookie is accepted
     assert header_res.status_code == 401
     assert "Missing access token" in header_res.json()["detail"]
+
+
+def test_phone_number_length_validation(client: TestClient) -> None:
+    login_res = client.post(
+        "/platform/login",
+        json={"username": "admin", "password": "password"},
+    )
+    admin_cookie = {settings.COOKIE_NAME: login_res.cookies[settings.COOKIE_NAME]}
+
+    # 1. Phone number too short (< 10 digits)
+    short_phone_res = client.post(
+        "/platform/users",
+        json={
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "email": f"u_{uuid.uuid4().hex[:6]}@example.com",
+            "full_name": "Test User",
+            "password": "password123",
+            "phone": "98765",
+            "role": "platform_user",
+        },
+        cookies=admin_cookie,
+    )
+    assert short_phone_res.status_code == 422
+
+    # 2. Phone number too long (> 10 digits)
+    long_phone_res = client.post(
+        "/platform/users",
+        json={
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "email": f"u_{uuid.uuid4().hex[:6]}@example.com",
+            "full_name": "Test User",
+            "password": "password123",
+            "phone": "9876543210099",
+            "role": "platform_user",
+        },
+        cookies=admin_cookie,
+    )
+    assert long_phone_res.status_code == 422
+
+    # 3. Exact 10-digit phone number is accepted
+    valid_uname = f"u_{uuid.uuid4().hex[:6]}"
+    valid_phone_res = client.post(
+        "/platform/users",
+        json={
+            "username": valid_uname,
+            "email": f"{valid_uname}@example.com",
+            "full_name": "Test User",
+            "password": "password123",
+            "phone": "9876543210",
+            "role": "platform_user",
+        },
+        cookies=admin_cookie,
+    )
+    assert valid_phone_res.status_code == 201
+    assert valid_phone_res.json()["phone"] == "9876543210"
