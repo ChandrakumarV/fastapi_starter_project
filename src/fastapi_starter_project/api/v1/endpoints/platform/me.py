@@ -41,12 +41,12 @@ async def update_admin_profile(
     current_admin: Annotated[UserInDB, Depends(require_platform)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> UserProfileResponse:
-    if update_data.username and update_data.username != current_admin.username:
-        existing_username = await user_service.get_by_username(db, update_data.username)
+    if update_data.user_name and update_data.user_name != current_admin.user_name:
+        existing_username = await user_service.get_by_username(db, update_data.user_name)
         if existing_username and existing_username.id != current_admin.id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Username '{update_data.username}' is already taken.",
+                detail=f"Username '{update_data.user_name}' is already taken.",
             )
 
     if update_data.email and update_data.email != current_admin.email:

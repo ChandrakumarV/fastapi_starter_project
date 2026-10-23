@@ -25,7 +25,7 @@ class User(Base):
         nullable=True,
         index=True,
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(100), nullable=False)
     user_name: Mapped[str] = mapped_column(
         String(50), unique=True, index=True, nullable=False
     )
@@ -80,11 +80,6 @@ class User(Base):
         lazy="selectin",
     )
 
-    # Compatibility synonyms
-    username = synonym("user_name")
-    full_name = synonym("name")
-    created_by_id = synonym("created_by")
-    deleted_by_id = synonym("deleted_by")
 
 
     def __repr__(self) -> str:

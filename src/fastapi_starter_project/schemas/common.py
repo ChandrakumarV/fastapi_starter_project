@@ -1,7 +1,8 @@
 import re
+from typing import Any
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 USERNAME_REGEX = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -66,6 +67,6 @@ class HealthResponse(BaseModel):
 
 class UserAuditBrief(BaseModel):
     id: uuid.UUID
-    name: str
+    full_name: str
 
     model_config = ConfigDict(from_attributes=True)

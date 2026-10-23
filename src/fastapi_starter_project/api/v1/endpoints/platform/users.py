@@ -46,10 +46,10 @@ async def create_user_by_admin(
             detail="Platform user management can only create platform roles ('platform_admin', 'platform_user').",
         )
 
-    if await user_service.get_by_username(db, user_in.username):
+    if await user_service.get_by_username(db, user_in.user_name):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Username '{user_in.username}' is already registered.",
+            detail=f"Username '{user_in.user_name}' is already registered.",
         )
     if await user_service.get_by_email(db, user_in.email):
         raise HTTPException(
@@ -59,13 +59,14 @@ async def create_user_by_admin(
 
     new_user = await user_service.create_user(
         db=db,
-        username=user_in.username,
+        username=user_in.user_name,
         email=user_in.email,
         full_name=user_in.full_name,
         password=user_in.password,
         role=role_val,
         created_by=current_admin.id,
         phone=user_in.phone,
+        is_active=user_in.is_active,
     )
     return UserResponse.model_validate(new_user)
 
@@ -138,12 +139,12 @@ async def update_platform_user_details(
         )
 
     # Check username uniqueness if changed
-    if user_in.username != target_user.username:
-        existing_username = await user_service.get_by_username(db, user_in.username)
+    if user_in.user_name != target_user.user_name:
+        existing_username = await user_service.get_by_username(db, user_in.user_name)
         if existing_username and existing_username.id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Username '{user_in.username}' is already taken.",
+                detail=f"Username '{user_in.user_name}' is already taken.",
             )
 
     # Check email uniqueness if changed
@@ -170,9 +171,9 @@ async def update_platform_user_details(
             detail=f"User with ID {user_id} not found.",
         )
 
-    db_user.user_name = user_in.username
+    db_user.user_name = user_in.user_name
     db_user.email = user_in.email
-    db_user.name = user_in.full_name
+    db_user.full_name = user_in.full_name
     db_user.phone = user_in.phone
     db_user.role = role_val
     if user_in.password:
@@ -190,7 +191,7 @@ async def update_platform_user_details(
 
 
 @router.patch(
-    "/users/{user_id}/status",
+    "/users/{user_id}",
     response_model=UserResponse,
     summary="Update platform admin active/inactive status",
     description="Allows administrators to activate or deactivate a platform admin account.",

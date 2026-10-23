@@ -26,25 +26,25 @@ router = APIRouter(
 
 
 async def _serialize_user(db: AsyncSession, user: User) -> TenantUserResponse:
-    creator_id = getattr(user, "created_by", None) or getattr(user, "created_by_id", None)
+    creator_id = getattr(user, "created_by", None)
     created_by = None
     if creator_id:
-        stmt = select(User.name).where(User.id == creator_id)
+        stmt = select(User.full_name).where(User.id == creator_id)
         c_name = (await db.execute(stmt)).scalar_one_or_none()
-        created_by = UserAuditBrief(id=creator_id, name=c_name or "Platform Admin")
+        created_by = UserAuditBrief(id=creator_id, full_name=c_name or "Platform Admin")
 
-    deleter_id = getattr(user, "deleted_by", None) or getattr(user, "deleted_by_id", None)
+    deleter_id = getattr(user, "deleted_by", None)
     deleted_by = None
     if deleter_id:
-        stmt = select(User.name).where(User.id == deleter_id)
+        stmt = select(User.full_name).where(User.id == deleter_id)
         d_name = (await db.execute(stmt)).scalar_one_or_none()
-        deleted_by = UserAuditBrief(id=deleter_id, name=d_name or "Platform Admin")
+        deleted_by = UserAuditBrief(id=deleter_id, full_name=d_name or "Platform Admin")
 
     return TenantUserResponse(
         id=user.id,
         created_at=user.created_at,
         created_by=created_by,
-        name=user.name,
+        full_name=user.full_name,
         user_name=user.user_name,
         email=user.email,
         phone=user.phone,
@@ -71,7 +71,7 @@ async def list_tenant_users(
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> list[TenantUserResponse]:
-    tenant = await tenant_service.get_tenant_by_id(db, tenant_id)
+    tenant = await tenant_service.get_tenant_by_id(db, tenant_id, include_deleted=True)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -88,13 +88,19 @@ async def list_tenant_users(
     "/{user_id}",
     response_model=TenantUserResponse,
     summary="Get tenant user details",
-    description="Fetches detailed user information within a specific tenant.",
+    description="Fetches detailed user information within a specific tenant, including soft-deleted users.",
 )
 async def get_tenant_user_details(
     tenant_id: uuid.UUID,
     user_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TenantUserResponse:
+    tenant = await tenant_service.get_tenant_by_id(db, tenant_id, include_deleted=True)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tenant with ID '{tenant_id}' not found.",
+        )
     user = await tenant_service.get_tenant_user_by_id(db, tenant_id, user_id)
     if not user:
         raise HTTPException(

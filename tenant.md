@@ -89,8 +89,8 @@ Create tenant request
   "pincode": 639001,
   "is_verified": false,
   "is_active": true,
-  "user_name": "Tenant Admin",
-  "user_id_name": "abc_admin",
+  "full_name": "Tenant Admin",
+  "user_name": "abc_admin",
   "user_email": "admin@example.com",
   "user_phone": "9876543211",
   "password": "password",
@@ -100,7 +100,7 @@ Create tenant request
 
 Notes:
 
-- `user_id_name` is the tenant admin's unique username in the database.
+- `user_name` is the tenant admin's unique username in the database.
 - Validate password confirmation on the server.
 - Hash passwords before storing them.
 - Create the tenant and its first admin in a single database transaction.
@@ -158,7 +158,7 @@ Create user request
 
 ```
 {
-  "name": "John Doe",
+  "full_name": "John Doe",
   "user_name": "john_doe",
   "email": "john@example.com",
   "phone": "9876543212",
@@ -173,7 +173,7 @@ Update user request
 
 ```
 {
-  "name": "John Smith",
+  "full_name": "John Smith",
   "user_name": "john_smith",
   "email": "john.smith@example.com",
   "phone": "9876543213",
@@ -210,7 +210,7 @@ For the `PATCH` endpoint, validate which fields are provided and process the app
     "id": "uuid",
     "name": "Platform Admin"
   },
-  "name": "John Doe",
+  "full_name": "John Doe",
   "user_name": "john_doe",
   "email": "john@example.com",
   "phone": "9876543212",

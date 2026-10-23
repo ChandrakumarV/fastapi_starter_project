@@ -11,7 +11,7 @@ from fastapi_starter_project.core.security import (
     verify_password,
 )
 from fastapi_starter_project.models.enums import UserRole
-from fastapi_starter_project.schemas.common import MessageResponse
+from fastapi_starter_project.schemas.common import MessageResponse, UserAuditBrief
 from fastapi_starter_project.services.platform.user_service import user_service
 from fastapi_starter_project.services.session_service import session_service
 
@@ -73,18 +73,22 @@ async def admin_login(
         tenant_id=None,
         role=role_value,
         extra_data={
-            "username": user.username,
+            "user_name": user.user_name,
+            "username": user.user_name,
             "email": user.email,
             "full_name": user.full_name,
             "phone": user.phone,
-            "created_by": str(user.created_by) if getattr(user, "created_by", None) else None,
-            "created_by_id": str(user.created_by_id) if getattr(user, "created_by_id", None) else None,
+            "created_by": (
+                str(user.created_by.id)
+                if isinstance(getattr(user, "created_by", None), UserAuditBrief)
+                else (str(user.created_by) if getattr(user, "created_by", None) else None)
+            ),
             "is_active": user.is_active,
         },
     )
 
     token = create_access_token(
-        subject=user.username,
+        subject=user.user_name,
         role=user.role,
         tenant_id=None,
         session_id=session_id,

@@ -7,7 +7,7 @@ from fastapi_starter_project.schemas.common import UserAuditBrief, validate_user
 
 class TenantUserCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    name: str = Field(..., min_length=2, max_length=100, examples=["John Doe"])
+    full_name: str = Field(..., min_length=2, max_length=100, examples=["John Doe"])
     user_name: str = Field(..., min_length=3, max_length=50, examples=["john_doe"])
     email: EmailStr = Field(..., examples=["john@example.com"])
     phone: str = Field(..., min_length=10, max_length=10, examples=["9876543212"])
@@ -32,7 +32,7 @@ class TenantUserCreate(BaseModel):
 
 class TenantUserUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    name: str | None = Field(default=None, min_length=2, max_length=100)
+    full_name: str | None = Field(default=None, min_length=2, max_length=100)
     user_name: str | None = Field(default=None, min_length=3, max_length=50)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, min_length=10, max_length=10)
@@ -71,7 +71,7 @@ class TenantUserResponse(BaseModel):
     id: uuid.UUID
     created_at: datetime
     created_by: UserAuditBrief | None = None
-    name: str
+    full_name: str
     user_name: str
     email: str
     phone: str | None = None

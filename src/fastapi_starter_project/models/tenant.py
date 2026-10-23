@@ -3,7 +3,7 @@ import uuid
 from typing import TYPE_CHECKING, Optional
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from fastapi_starter_project.models.base import Base
 
 if TYPE_CHECKING:
@@ -70,10 +70,6 @@ class Tenant(Base):
         foreign_keys=[deleted_by],
         lazy="selectin",
     )
-
-    # Compatibility synonyms
-    created_by_id = synonym("created_by")
-    deleted_by_id = synonym("deleted_by")
 
     def __repr__(self) -> str:
         return f"<Tenant(id={self.id}, name='{self.name}', is_active={self.is_active})>"

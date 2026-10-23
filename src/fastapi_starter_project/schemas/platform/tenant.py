@@ -15,14 +15,14 @@ class TenantCreate(BaseModel):
     pincode: int = Field(..., gt=0, examples=[639001])
     is_verified: bool = Field(default=False)
     is_active: bool = Field(default=True)
-    user_name: str = Field(..., min_length=2, max_length=100, examples=["Tenant Admin"])
-    user_id_name: str = Field(..., min_length=3, max_length=50, examples=["abc_admin"])
+    full_name: str = Field(..., min_length=2, max_length=100, examples=["Tenant Admin"])
+    user_name: str = Field(..., min_length=3, max_length=50, examples=["abc_admin"])
     user_email: EmailStr = Field(..., examples=["admin@example.com"])
     user_phone: str = Field(..., min_length=10, max_length=10, examples=["9876543211"])
     password: str = Field(..., min_length=6, examples=["password"])
     confirm_password: str = Field(..., min_length=6, examples=["password"])
 
-    @field_validator("user_id_name")
+    @field_validator("user_name")
     @classmethod
     def validate_tenant_admin_username(cls, v: str) -> str:
         return validate_username(v)
@@ -76,15 +76,15 @@ class TenantResponse(BaseModel):
 
         deleted_by_obj = None
         if getattr(data, "deleted_by_user", None):
-            deleted_by_obj = UserAuditBrief(id=data.deleted_by_user.id, name=data.deleted_by_user.name)
+            deleted_by_obj = UserAuditBrief(id=data.deleted_by_user.id, full_name=data.deleted_by_user.full_name)
         elif getattr(data, "deleted_by", None):
-            deleted_by_obj = UserAuditBrief(id=data.deleted_by, name="Platform Admin")
+            deleted_by_obj = UserAuditBrief(id=data.deleted_by, full_name="Platform Admin")
 
         created_by_obj = None
         if getattr(data, "created_by_user", None):
-            created_by_obj = UserAuditBrief(id=data.created_by_user.id, name=data.created_by_user.name)
+            created_by_obj = UserAuditBrief(id=data.created_by_user.id, full_name=data.created_by_user.full_name)
         elif getattr(data, "created_by", None):
-            created_by_obj = UserAuditBrief(id=data.created_by, name="Platform Admin")
+            created_by_obj = UserAuditBrief(id=data.created_by, full_name="Platform Admin")
 
         return {
             "id": getattr(data, "id"),

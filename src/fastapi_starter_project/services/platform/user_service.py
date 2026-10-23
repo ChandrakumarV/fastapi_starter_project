@@ -14,20 +14,26 @@ class UserService:
 
     def _to_user_in_db(self, user: User) -> UserInDB:
         deleted_by = None
-        if getattr(user, "deleted_by_user", None):
-            deleted_by = UserAuditBrief(id=user.deleted_by_user.id, name=user.deleted_by_user.name)
+        if "deleted_by_user" in user.__dict__ and user.deleted_by_user:
+            deleted_by = UserAuditBrief(id=user.deleted_by_user.id, full_name=user.deleted_by_user.full_name)
         elif getattr(user, "deleted_by", None):
-            deleted_by = UserAuditBrief(id=user.deleted_by, name="Platform Admin")
+            deleted_by = UserAuditBrief(id=user.deleted_by, full_name="Platform Admin")
+
+        created_by = None
+        if "created_by_user" in user.__dict__ and user.created_by_user:
+            created_by = UserAuditBrief(id=user.created_by_user.id, full_name=user.created_by_user.full_name)
+        elif getattr(user, "created_by", None):
+            created_by = UserAuditBrief(id=user.created_by, full_name="Platform Admin")
 
         return UserInDB(
             id=user.id,
-            username=user.user_name,
+            user_name=user.user_name,
             email=user.email,
-            full_name=user.name,
+            full_name=user.full_name,
             phone=user.phone,
             role=user.role,
             tenant_id=user.tenant_id,
-            created_by=getattr(user, "created_by", None),
+            created_by=created_by,
             is_active=user.is_active,
             is_deleted=user.is_deleted,
             deleted_at=user.deleted_at,
@@ -100,22 +106,21 @@ class UserService:
         role: str = "tenant_user",
         tenant_id: uuid.UUID | None = None,
         created_by: uuid.UUID | None = None,
-        created_by_id: uuid.UUID | None = None,
         phone: str | None = None,
+        is_active: bool = True,
     ) -> UserInDB:
         hashed_pw = get_password_hash(password)
-        creator = created_by if created_by is not None else created_by_id
         new_user = User(
             id=uuid.uuid4(),
             user_name=username,
             email=email,
-            name=full_name,
+            full_name=full_name,
             phone=phone,
             hashed_password=hashed_pw,
             role=role,
             tenant_id=tenant_id,
-            created_by=creator,
-            is_active=True,
+            created_by=created_by,
+            is_active=is_active,
             is_deleted=False,
             deleted_at=None,
         )
@@ -149,10 +154,10 @@ class UserService:
         if not db_user:
             return None
 
-        if update_data.username is not None:
-            db_user.user_name = update_data.username
+        if update_data.user_name is not None:
+            db_user.user_name = update_data.user_name
         if update_data.full_name is not None:
-            db_user.name = update_data.full_name
+            db_user.full_name = update_data.full_name
         if update_data.email is not None:
             db_user.email = update_data.email
         if update_data.phone is not None:
@@ -207,7 +212,6 @@ class UserService:
         db: AsyncSession,
         user_id: uuid.UUID | str,
         deleted_by: uuid.UUID | None = None,
-        deleted_by_id: uuid.UUID | None = None,
     ) -> bool:
         u_id = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
         result = await db.execute(select(User).where(User.id == u_id, User.is_deleted == False))
@@ -217,9 +221,8 @@ class UserService:
 
         db_user.is_deleted = True
         db_user.deleted_at = datetime.now(timezone.utc)
-        deleter = deleted_by if deleted_by is not None else deleted_by_id
-        if deleter:
-            db_user.deleted_by = uuid.UUID(str(deleter)) if not isinstance(deleter, uuid.UUID) else deleter
+        if deleted_by:
+            db_user.deleted_by = uuid.UUID(str(deleted_by)) if not isinstance(deleted_by, uuid.UUID) else deleted_by
 
         # Immediately revoke all active sessions when user is deleted
         await session_service.invalidate_user_sessions(u_id)

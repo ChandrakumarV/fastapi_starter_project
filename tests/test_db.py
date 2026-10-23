@@ -12,10 +12,10 @@ async def test_database_connection_and_user_query() -> None:
     session_maker = async_sessionmaker(bind=test_engine, class_=AsyncSession, expire_on_commit=False)
 
     async with session_maker() as session:
-        result = await session.execute(select(User).where(User.username == "admin"))
+        result = await session.execute(select(User).where(User.user_name == "admin"))
         user = result.scalar_one_or_none()
         assert user is not None
-        assert user.username == "admin"
+        assert user.user_name == "admin"
         assert user.email == "admin@example.com"
         assert user.role == "platform_admin"
 

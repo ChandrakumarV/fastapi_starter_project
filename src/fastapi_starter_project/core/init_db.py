@@ -18,7 +18,7 @@ async def seed_initial_data() -> None:
             admin_id = uuid.uuid4()
             super_admin = User(
                 id=admin_id,
-                name="Platform Admin",
+                full_name="Platform Admin",
                 user_name="admin",
                 email="admin@example.com",
                 phone="9876543200",
@@ -66,7 +66,7 @@ async def seed_initial_data() -> None:
             t_admin = User(
                 id=uuid.uuid4(),
                 tenant_id=tenant.id,
-                name="Tenant Admin",
+                full_name="Tenant Admin",
                 user_name="abc_admin",
                 email="tenant_admin@example.com",
                 phone="9876543211",
@@ -87,7 +87,7 @@ async def seed_initial_data() -> None:
             t_user = User(
                 id=uuid.uuid4(),
                 tenant_id=tenant.id,
-                name="Tenant User",
+                full_name="Tenant User",
                 user_name="abc_user",
                 email="tenant_user@example.com",
                 phone="9876543212",

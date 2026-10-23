@@ -44,13 +44,15 @@ async def list_tenants(
     "/{tenant_id}",
     response_model=TenantResponse,
     summary="Get tenant details",
-    description="Fetches detailed information for a specific tenant by ID.",
+    description="Fetches detailed information for a specific tenant by ID, including soft-deleted tenants.",
 )
 async def get_tenant_details(
     tenant_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TenantResponse:
-    tenant = await tenant_service.get_tenant_by_id(db, tenant_id)
+    tenant = await tenant_service.get_tenant_by_id(
+        db, tenant_id, include_deleted=True
+    )
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -72,10 +74,10 @@ async def create_tenant(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TenantResponse:
     # 1. Validate username uniqueness
-    if await user_service.get_by_username(db, data.user_id_name):
+    if await user_service.get_by_username(db, data.user_name):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Username '{data.user_id_name}' is already taken.",
+            detail=f"Username '{data.user_name}' is already taken.",
         )
 
     # 2. Validate user email uniqueness

@@ -86,8 +86,8 @@ def test_tenant_creation_and_lifecycle(client: TestClient) -> None:
         "pincode": 639001,
         "is_verified": False,
         "is_active": True,
-        "user_name": "Tenant Admin",
-        "user_id_name": f"admin_{uid_suffix}",
+        "full_name": "Tenant Admin",
+        "user_name": f"admin_{uid_suffix}",
         "user_email": f"tadmin_{uid_suffix}@example.com",
         "user_phone": "9876543211",
         "password": "password123",
@@ -155,8 +155,8 @@ def test_tenant_user_management_and_sessions(client: TestClient) -> None:
         "pincode": 600001,
         "is_verified": True,
         "is_active": True,
-        "user_name": "Corp Admin",
-        "user_id_name": f"corp_admin_{uid_suffix}",
+        "full_name": "Corp Admin",
+        "user_name": f"corp_admin_{uid_suffix}",
         "user_email": f"corp_admin_{uid_suffix}@example.com",
         "user_phone": "9876543211",
         "password": "password123",
@@ -168,7 +168,7 @@ def test_tenant_user_management_and_sessions(client: TestClient) -> None:
 
     # 2. Create another user under this tenant
     user_payload = {
-        "name": "Jane Staff",
+        "full_name": "Jane Staff",
         "user_name": f"jane_{uid_suffix}",
         "email": f"jane_{uid_suffix}@example.com",
         "phone": "9876543299",
@@ -244,17 +244,19 @@ def test_multi_role_authorization_matrix(client: TestClient) -> None:
 
     # --- 1. Platform Admin creates Platform User ---
     p_user_name = f"pusr_{uid_suffix}"
-    client.post(
+    res = client.post(
         "/platform/users",
         json={
-            "username": p_user_name,
+            "user_name": p_user_name,
             "email": f"{p_user_name}@example.com",
             "full_name": "Platform User",
             "password": "password123",
+            "confirm_password": "password123",
             "role": "platform_user",
         },
         cookies=super_admin_cookie,
     )
+    assert res.status_code == 201
     p_login = client.post(
         "/platform/login",
         json={"username": p_user_name, "password": "password123"},
@@ -272,8 +274,8 @@ def test_multi_role_authorization_matrix(client: TestClient) -> None:
         "pincode": 600001,
         "is_verified": True,
         "is_active": True,
-        "user_name": "Admin Tenant A",
-        "user_id_name": t_a_admin_user,
+        "full_name": "Admin Tenant A",
+        "user_name": t_a_admin_user,
         "user_email": f"{t_a_admin_user}@example.com",
         "user_phone": "9876543211",
         "password": "password123",
@@ -294,8 +296,8 @@ def test_multi_role_authorization_matrix(client: TestClient) -> None:
         "pincode": 600002,
         "is_verified": True,
         "is_active": True,
-        "user_name": "Admin Tenant B",
-        "user_id_name": t_b_admin_user,
+        "full_name": "Admin Tenant B",
+        "user_name": t_b_admin_user,
         "user_email": f"{t_b_admin_user}@example.com",
         "user_phone": "9876543221",
         "password": "password123",
@@ -357,7 +359,7 @@ def test_multi_role_authorization_matrix(client: TestClient) -> None:
     staff_create = client.post(
         f"/platform/tenants/{tenant_a_id}/users",
         json={
-            "name": "Staff A",
+            "full_name": "Staff A",
             "user_name": staff_user,
             "email": f"{staff_user}@example.com",
             "phone": "9876543255",

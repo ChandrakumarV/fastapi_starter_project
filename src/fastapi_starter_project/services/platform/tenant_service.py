@@ -50,8 +50,8 @@ class TenantService:
         tenant_admin = User(
             id=uuid.uuid4(),
             tenant_id=tenant.id,
-            name=data.user_name,
-            user_name=data.user_id_name,
+            full_name=data.full_name,
+            user_name=data.user_name,
             email=str(data.user_email),
             phone=data.user_phone,
             role=UserRole.TENANT_ADMIN.value,
@@ -68,11 +68,11 @@ class TenantService:
         return tenant, tenant_admin
 
     async def get_tenant_by_id(
-        self, db: AsyncSession, tenant_id: uuid.UUID
+        self, db: AsyncSession, tenant_id: uuid.UUID, include_deleted: bool = False
     ) -> Tenant | None:
-        stmt = select(Tenant).where(
-            Tenant.id == tenant_id, Tenant.is_deleted == False
-        )
+        stmt = select(Tenant).where(Tenant.id == tenant_id)
+        if not include_deleted:
+            stmt = stmt.where(Tenant.is_deleted == False)
         return (await db.execute(stmt)).scalar_one_or_none()
 
     async def get_tenant_by_name_or_email(
@@ -145,7 +145,6 @@ class TenantService:
         db: AsyncSession,
         tenant_id: uuid.UUID,
         deleted_by: uuid.UUID | None = None,
-        deleted_by_id: uuid.UUID | None = None,
     ) -> bool:
         tenant = await self.get_tenant_by_id(db, tenant_id)
         if not tenant:
@@ -154,7 +153,7 @@ class TenantService:
         tenant.is_deleted = True
         tenant.is_active = False
         tenant.deleted_at = datetime.now(timezone.utc)
-        tenant.deleted_by = deleted_by if deleted_by is not None else deleted_by_id
+        tenant.deleted_by = deleted_by
 
         # Invalidate all tenant sessions in Redis
         await session_service.invalidate_tenant_sessions(tenant_id)
@@ -204,7 +203,7 @@ class TenantService:
         user = User(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
-            name=data.name,
+            full_name=data.full_name,
             user_name=data.user_name,
             email=str(data.email),
             phone=data.phone,
@@ -230,8 +229,8 @@ class TenantService:
         if not user or user.is_deleted:
             return None
 
-        if data.name is not None:
-            user.name = data.name
+        if data.full_name is not None:
+            user.full_name = data.full_name
         if data.user_name is not None:
             user.user_name = data.user_name
         if data.email is not None:

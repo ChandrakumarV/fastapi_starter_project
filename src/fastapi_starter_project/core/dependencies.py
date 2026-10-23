@@ -58,7 +58,8 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired session. Please log in again.",
             )
-        if session_data.get("username") and session_data.get("user_id"):
+        u_name = session_data.get("user_name") or session_data.get("username")
+        if u_name and session_data.get("user_id"):
             if not session_data.get("is_active", True):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -66,13 +67,13 @@ async def get_current_user(
                 )
             return UserInDB(
                 id=uuid.UUID(str(session_data["user_id"])),
-                username=session_data["username"],
-                email=session_data.get("email", f"{session_data['username']}@example.com"),
-                full_name=session_data.get("full_name", session_data["username"]),
+                user_name=u_name,
+                email=session_data.get("email", f"{u_name}@example.com"),
+                full_name=session_data.get("full_name", u_name),
                 phone=session_data.get("phone"),
                 role=session_data.get("role", role or UserRole.PLATFORM_USER.value),
                 tenant_id=uuid.UUID(str(session_data["tenant_id"])) if session_data.get("tenant_id") else None,
-                created_by=uuid.UUID(str(session_data.get("created_by") or session_data.get("created_by_id"))) if (session_data.get("created_by") or session_data.get("created_by_id")) else None,
+                created_by=session_data.get("created_by"),
                 is_active=session_data.get("is_active", True),
                 is_deleted=False,
             )

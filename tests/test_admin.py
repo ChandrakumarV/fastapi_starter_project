@@ -34,7 +34,7 @@ def test_platform_flow_and_me_crud(client: TestClient) -> None:
     # 2. GET /platform/me (allowed for platform admin)
     me_res = client.get("/platform/me", cookies=admin_cookie)
     assert me_res.status_code == 200
-    assert me_res.json()["username"] == "admin"
+    assert me_res.json()["user_name"] == "admin"
     assert me_res.json()["role"] == "platform_admin"
     assert "tenant_id" not in me_res.json()
 
@@ -61,24 +61,25 @@ def test_platform_flow_and_me_crud(client: TestClient) -> None:
     create_res = client.post(
         "/platform/users",
         json={
-            "username": new_user_username,
+            "user_name": new_user_username,
             "email": f"{new_user_username}@example.com",
             "full_name": "New Platform User",
             "password": "seconduserpassword",
+            "confirm_password": "seconduserpassword",
             "role": "platform_user",
         },
         cookies=admin_cookie,
     )
     assert create_res.status_code == 201
-    assert create_res.json()["username"] == new_user_username
+    assert create_res.json()["user_name"] == new_user_username
     assert create_res.json()["role"] == "platform_user"
     assert "tenant_id" not in create_res.json()
 
     # 5. Platform Admin lists all users
-    list_res = client.get("/platform/users", cookies=admin_cookie)
+    list_res = client.get("/platform/users", params={"limit": 500}, cookies=admin_cookie)
     assert list_res.status_code == 200
     assert all("tenant_id" not in u for u in list_res.json())
-    usernames = [u["username"] for u in list_res.json()]
+    usernames = [u["user_name"] for u in list_res.json()]
     assert "admin" in usernames
     assert new_user_username in usernames
 
@@ -139,10 +140,11 @@ def test_platform_toggle_user_active_and_soft_delete(client: TestClient) -> None
     create_res = client.post(
         "/platform/users",
         json={
-            "username": test_user_name,
+            "user_name": test_user_name,
             "email": f"{test_user_name}@example.com",
             "full_name": "Test Platform User",
             "password": test_password,
+            "confirm_password": test_password,
             "role": "platform_user",
         },
         cookies=admin_cookie,
@@ -152,7 +154,7 @@ def test_platform_toggle_user_active_and_soft_delete(client: TestClient) -> None
 
     # 3. Admin deactivates user
     deactivate_res = client.patch(
-        f"/platform/users/{user_id}/status",
+        f"/platform/users/{user_id}",
         json={"is_active": False},
         cookies=admin_cookie,
     )
@@ -169,7 +171,7 @@ def test_platform_toggle_user_active_and_soft_delete(client: TestClient) -> None
 
     # 5. Admin reactivates user
     reactivate_res = client.patch(
-        f"/platform/users/{user_id}/status",
+        f"/platform/users/{user_id}",
         json={"is_active": True},
         cookies=admin_cookie,
     )
@@ -229,7 +231,7 @@ def test_platform_auth_endpoints(client: TestClient) -> None:
     # 2. Verify access to /platform/me with session
     me_res = client.get("/platform/me", cookies=admin_cookie)
     assert me_res.status_code == 200
-    assert me_res.json()["username"] == "admin"
+    assert me_res.json()["user_name"] == "admin"
 
     # 3. Logout via /platform/logout with cookie succeeds and clears Redis session
     logout_res = client.delete("/platform/logout", cookies=admin_cookie)
@@ -273,10 +275,11 @@ def test_platform_user_role_restrictions(client: TestClient) -> None:
     invalid_role_res = client.post(
         "/platform/users",
         json={
-            "username": f"bad_{uuid.uuid4().hex[:6]}",
+            "user_name": f"bad_{uuid.uuid4().hex[:6]}",
             "email": f"bad_{uuid.uuid4().hex[:6]}@example.com",
             "full_name": "Bad Role User",
             "password": "password123",
+            "confirm_password": "password123",
             "role": "tenant_user",
         },
         cookies=admin_cookie,
@@ -288,10 +291,11 @@ def test_platform_user_role_restrictions(client: TestClient) -> None:
     p_user_res = client.post(
         "/platform/users",
         json={
-            "username": p_user_username,
+            "user_name": p_user_username,
             "email": f"{p_user_username}@example.com",
             "full_name": "Platform User One",
             "password": "securepassword",
+            "confirm_password": "securepassword",
             "role": "platform_user",
         },
         cookies=admin_cookie,
@@ -355,10 +359,11 @@ def test_phone_number_length_validation(client: TestClient) -> None:
     short_phone_res = client.post(
         "/platform/users",
         json={
-            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "user_name": f"u_{uuid.uuid4().hex[:6]}",
             "email": f"u_{uuid.uuid4().hex[:6]}@example.com",
             "full_name": "Test User",
             "password": "password123",
+            "confirm_password": "password123",
             "phone": "98765",
             "role": "platform_user",
         },
@@ -370,10 +375,11 @@ def test_phone_number_length_validation(client: TestClient) -> None:
     long_phone_res = client.post(
         "/platform/users",
         json={
-            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "user_name": f"u_{uuid.uuid4().hex[:6]}",
             "email": f"u_{uuid.uuid4().hex[:6]}@example.com",
             "full_name": "Test User",
             "password": "password123",
+            "confirm_password": "password123",
             "phone": "9876543210099",
             "role": "platform_user",
         },
@@ -386,10 +392,11 @@ def test_phone_number_length_validation(client: TestClient) -> None:
     valid_phone_res = client.post(
         "/platform/users",
         json={
-            "username": valid_uname,
+            "user_name": valid_uname,
             "email": f"{valid_uname}@example.com",
             "full_name": "Test User",
             "password": "password123",
+            "confirm_password": "password123",
             "phone": "9876543210",
             "role": "platform_user",
         },
@@ -414,10 +421,11 @@ def test_platform_user_put_update_and_password_patch(client: TestClient) -> None
     create_res = client.post(
         "/platform/users",
         json={
-            "username": orig_uname,
+            "user_name": orig_uname,
             "email": orig_email,
             "full_name": "Original Name",
             "password": "initial_password_123",
+            "confirm_password": "initial_password_123",
             "phone": "9876543210",
             "role": "platform_user",
         },
@@ -443,7 +451,7 @@ def test_platform_user_put_update_and_password_patch(client: TestClient) -> None
     put_res = client.put(
         f"/platform/users/{user_id}",
         json={
-            "username": new_uname,
+            "user_name": new_uname,
             "email": new_email,
             "full_name": "Updated Platform User",
             "phone": "9123456780",
@@ -452,7 +460,7 @@ def test_platform_user_put_update_and_password_patch(client: TestClient) -> None
         cookies=admin_cookie,
     )
     assert put_res.status_code == 200
-    assert put_res.json()["username"] == new_uname
+    assert put_res.json()["user_name"] == new_uname
     assert put_res.json()["email"] == new_email
     assert put_res.json()["full_name"] == "Updated Platform User"
     assert put_res.json()["phone"] == "9123456780"
@@ -468,18 +476,18 @@ def test_platform_user_put_update_and_password_patch(client: TestClient) -> None
     assert user_relogin.status_code == 200
     user_cookie = {settings.COOKIE_NAME: user_relogin.cookies[settings.COOKIE_NAME]}
 
-    # 6. PATCH /platform/users/<user_id>/password
+    # 6. PATCH /platform/me
     pwd_res = client.patch(
-        f"/platform/users/{user_id}/password",
+        "/platform/me",
         json={
             "old_password": "initial_password_123",
             "new_password": "new_secure_password_456",
-            "comfirm_new_password": "new_secure_password_456",
+            "confirm_new_password": "new_secure_password_456",
         },
-        cookies=admin_cookie,
+        cookies=user_cookie,
     )
     assert pwd_res.status_code == 200
-    assert "password updated successfully" in pwd_res.json()["message"]
+    assert "password updated successfully" in pwd_res.json()["message"].lower()
 
     # User's session was again invalidated by password change
     assert client.get("/platform/me", cookies=user_cookie).status_code == 401
