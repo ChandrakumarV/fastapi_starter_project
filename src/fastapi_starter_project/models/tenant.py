@@ -1,9 +1,9 @@
 from datetime import datetime
 import uuid
-from typing import TYPE_CHECKING
-from sqlalchemy import Boolean, DateTime, Integer, String, func, text
+from typing import TYPE_CHECKING, Optional
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 from fastapi_starter_project.models.base import Base
 
 if TYPE_CHECKING:
@@ -37,6 +37,16 @@ class Tenant(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -48,8 +58,22 @@ class Tenant(Base):
     )
 
     users: Mapped[list["User"]] = relationship(
-        "User", back_populates="tenant", cascade="all, delete-orphan"
+        "User", back_populates="tenant", cascade="all, delete-orphan", foreign_keys="User.tenant_id"
     )
+    created_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[created_by],
+        lazy="selectin",
+    )
+    deleted_by_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[deleted_by],
+        lazy="selectin",
+    )
+
+    # Compatibility synonyms
+    created_by_id = synonym("created_by")
+    deleted_by_id = synonym("deleted_by")
 
     def __repr__(self) -> str:
         return f"<Tenant(id={self.id}, name='{self.name}', is_active={self.is_active})>"

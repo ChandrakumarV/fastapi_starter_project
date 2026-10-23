@@ -4,7 +4,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.security import get_password_hash, verify_password
 from fastapi_starter_project.models.user import User
-from fastapi_starter_project.schemas.user import UserInDB, UserUpdate
+from fastapi_starter_project.schemas.common import UserAuditBrief
+from fastapi_starter_project.schemas.platform.user import UserInDB, UserUpdate
 from fastapi_starter_project.services.session_service import session_service
 
 
@@ -12,6 +13,12 @@ class UserService:
     """User service handling user database operations with PostgreSQL."""
 
     def _to_user_in_db(self, user: User) -> UserInDB:
+        deleted_by = None
+        if getattr(user, "deleted_by_user", None):
+            deleted_by = UserAuditBrief(id=user.deleted_by_user.id, name=user.deleted_by_user.name)
+        elif getattr(user, "deleted_by", None):
+            deleted_by = UserAuditBrief(id=user.deleted_by, name="Platform Admin")
+
         return UserInDB(
             id=user.id,
             username=user.user_name,
@@ -20,10 +27,11 @@ class UserService:
             phone=user.phone,
             role=user.role,
             tenant_id=user.tenant_id,
-            created_by_id=user.created_by_id,
+            created_by=getattr(user, "created_by", None),
             is_active=user.is_active,
             is_deleted=user.is_deleted,
             deleted_at=user.deleted_at,
+            deleted_by=deleted_by,
             hashed_password=user.hashed_password or "",
         )
 
@@ -71,16 +79,14 @@ class UserService:
         db: AsyncSession,
         skip: int = 0,
         limit: int = 100,
-        include_deleted: bool = False,
+        deleted: bool = False,
         roles: list[str] | None = None,
     ) -> list[UserInDB]:
-        query = select(User)
-        if not include_deleted:
-            query = query.where(User.is_deleted == False)
+        query = select(User).where(User.is_deleted == deleted)
         if roles is not None:
             query = query.where(User.role.in_(roles))
 
-        result = await db.execute(query.offset(skip).limit(limit))
+        result = await db.execute(query.order_by(User.created_at.desc()).offset(skip).limit(limit))
         db_users = result.scalars().all()
         return [self._to_user_in_db(u) for u in db_users]
 
@@ -93,10 +99,12 @@ class UserService:
         password: str,
         role: str = "tenant_user",
         tenant_id: uuid.UUID | None = None,
+        created_by: uuid.UUID | None = None,
         created_by_id: uuid.UUID | None = None,
         phone: str | None = None,
     ) -> UserInDB:
         hashed_pw = get_password_hash(password)
+        creator = created_by if created_by is not None else created_by_id
         new_user = User(
             id=uuid.uuid4(),
             user_name=username,
@@ -106,7 +114,7 @@ class UserService:
             hashed_password=hashed_pw,
             role=role,
             tenant_id=tenant_id,
-            created_by_id=created_by_id,
+            created_by=creator,
             is_active=True,
             is_deleted=False,
             deleted_at=None,
@@ -141,19 +149,37 @@ class UserService:
         if not db_user:
             return None
 
+        if update_data.username is not None:
+            db_user.user_name = update_data.username
         if update_data.full_name is not None:
             db_user.name = update_data.full_name
         if update_data.email is not None:
             db_user.email = update_data.email
         if update_data.phone is not None:
             db_user.phone = update_data.phone
-        if update_data.password is not None:
-            db_user.hashed_password = get_password_hash(update_data.password)
 
         await db.commit()
         await db.refresh(db_user)
 
         # On any update to the user, immediately revoke all active sessions
+        await session_service.invalidate_user_sessions(u_id)
+
+        return self._to_user_in_db(db_user)
+
+    async def change_password(
+        self, db: AsyncSession, user_id: uuid.UUID | str, new_password: str
+    ) -> UserInDB | None:
+        u_id = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
+        result = await db.execute(select(User).where(User.id == u_id, User.is_deleted == False))
+        db_user = result.scalar_one_or_none()
+        if not db_user:
+            return None
+
+        db_user.hashed_password = get_password_hash(new_password)
+        await db.commit()
+        await db.refresh(db_user)
+
+        # Invalidate all active sessions in Redis
         await session_service.invalidate_user_sessions(u_id)
 
         return self._to_user_in_db(db_user)
@@ -176,7 +202,13 @@ class UserService:
 
         return self._to_user_in_db(db_user)
 
-    async def delete_user(self, db: AsyncSession, user_id: uuid.UUID | str) -> bool:
+    async def delete_user(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID | str,
+        deleted_by: uuid.UUID | None = None,
+        deleted_by_id: uuid.UUID | None = None,
+    ) -> bool:
         u_id = uuid.UUID(str(user_id)) if not isinstance(user_id, uuid.UUID) else user_id
         result = await db.execute(select(User).where(User.id == u_id, User.is_deleted == False))
         db_user = result.scalar_one_or_none()
@@ -185,6 +217,10 @@ class UserService:
 
         db_user.is_deleted = True
         db_user.deleted_at = datetime.now(timezone.utc)
+        deleter = deleted_by if deleted_by is not None else deleted_by_id
+        if deleter:
+            db_user.deleted_by = uuid.UUID(str(deleter)) if not isinstance(deleter, uuid.UUID) else deleter
+
         # Immediately revoke all active sessions when user is deleted
         await session_service.invalidate_user_sessions(u_id)
         await db.commit()

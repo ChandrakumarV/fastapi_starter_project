@@ -44,12 +44,12 @@ class User(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    deleted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
@@ -64,26 +64,27 @@ class User(Base):
         nullable=False,
     )
 
-    # Relationships
     tenant: Mapped[Optional["Tenant"]] = relationship(
-        "Tenant", back_populates="users", lazy="selectin"
+        "Tenant", back_populates="users", foreign_keys=[tenant_id], lazy="selectin"
     )
     created_by_user: Mapped[Optional["User"]] = relationship(
         "User",
-        foreign_keys=[created_by_id],
+        foreign_keys=[created_by],
         remote_side=[id],
         lazy="selectin",
     )
     deleted_by_user: Mapped[Optional["User"]] = relationship(
         "User",
-        foreign_keys=[deleted_by_id],
+        foreign_keys=[deleted_by],
         remote_side=[id],
         lazy="selectin",
     )
 
-    # Compatibility synonyms for code expecting username / full_name
+    # Compatibility synonyms
     username = synonym("user_name")
     full_name = synonym("name")
+    created_by_id = synonym("created_by")
+    deleted_by_id = synonym("deleted_by")
 
 
     def __repr__(self) -> str:

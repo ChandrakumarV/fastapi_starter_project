@@ -6,12 +6,12 @@ from fastapi_starter_project.core.security import get_password_hash
 from fastapi_starter_project.models.enums import UserRole
 from fastapi_starter_project.models.tenant import Tenant
 from fastapi_starter_project.models.user import User
-from fastapi_starter_project.schemas.tenant import (
+from fastapi_starter_project.schemas.platform.tenant import (
     TenantCreate,
     TenantStatusPatch,
     TenantUpdate,
 )
-from fastapi_starter_project.schemas.tenant_user import (
+from fastapi_starter_project.schemas.platform.tenant_user import (
     TenantUserCreate,
     TenantUserPatch,
     TenantUserUpdate,
@@ -42,6 +42,7 @@ class TenantService:
             is_verified=data.is_verified,
             is_active=data.is_active,
             is_deleted=False,
+            created_by=creator_id,
         )
         db.add(tenant)
         await db.flush()
@@ -57,7 +58,7 @@ class TenantService:
             hashed_password=get_password_hash(data.password),
             is_active=True,
             is_deleted=False,
-            created_by_id=creator_id,
+            created_by=creator_id,
         )
         db.add(tenant_admin)
         await db.commit()
@@ -84,11 +85,11 @@ class TenantService:
         return (await db.execute(stmt)).scalar_one_or_none()
 
     async def list_tenants(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self, db: AsyncSession, skip: int = 0, limit: int = 100, deleted: bool = False
     ) -> list[Tenant]:
         stmt = (
             select(Tenant)
-            .where(Tenant.is_deleted == False)
+            .where(Tenant.is_deleted == deleted)
             .order_by(Tenant.created_at.desc())
             .offset(skip)
             .limit(limit)
@@ -140,7 +141,11 @@ class TenantService:
         return tenant
 
     async def delete_tenant(
-        self, db: AsyncSession, tenant_id: uuid.UUID
+        self,
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        deleted_by: uuid.UUID | None = None,
+        deleted_by_id: uuid.UUID | None = None,
     ) -> bool:
         tenant = await self.get_tenant_by_id(db, tenant_id)
         if not tenant:
@@ -149,6 +154,7 @@ class TenantService:
         tenant.is_deleted = True
         tenant.is_active = False
         tenant.deleted_at = datetime.now(timezone.utc)
+        tenant.deleted_by = deleted_by if deleted_by is not None else deleted_by_id
 
         # Invalidate all tenant sessions in Redis
         await session_service.invalidate_tenant_sessions(tenant_id)
@@ -163,7 +169,7 @@ class TenantService:
         self,
         db: AsyncSession,
         tenant_id: uuid.UUID,
-        deleted_users: bool = False,
+        deleted: bool = False,
         skip: int = 0,
         limit: int = 100,
     ) -> list[User]:
@@ -171,7 +177,7 @@ class TenantService:
             select(User)
             .where(
                 User.tenant_id == tenant_id,
-                User.is_deleted == deleted_users,
+                User.is_deleted == deleted,
             )
             .order_by(User.created_at.desc())
             .offset(skip)
@@ -206,7 +212,7 @@ class TenantService:
             hashed_password=get_password_hash(data.password),
             is_active=data.is_active,
             is_deleted=False,
-            created_by_id=creator_id,
+            created_by=creator_id,
         )
         db.add(user)
         await db.commit()
@@ -279,7 +285,7 @@ class TenantService:
 
         user.is_deleted = True
         user.deleted_at = datetime.now(timezone.utc)
-        user.deleted_by_id = deleter_id
+        user.deleted_by = deleter_id
 
         # Invalidate sessions for deleted user
         await session_service.invalidate_user_sessions(user_id)

@@ -1,7 +1,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 import jwt
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.config import settings
 from fastapi_starter_project.core.database import get_db
@@ -12,13 +12,14 @@ from fastapi_starter_project.core.security import (
 )
 from fastapi_starter_project.models.enums import UserRole
 from fastapi_starter_project.schemas.common import MessageResponse
+from fastapi_starter_project.services.platform.user_service import user_service
 from fastapi_starter_project.services.session_service import session_service
-from fastapi_starter_project.services.user_service import user_service
 
 router = APIRouter(tags=["Auth"])
 
 
 class AdminLoginInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     username: str = Field(..., min_length=1, examples=["admin"])
     password: str = Field(..., min_length=4, examples=["password"])
 
@@ -76,7 +77,8 @@ async def admin_login(
             "email": user.email,
             "full_name": user.full_name,
             "phone": user.phone,
-            "created_by_id": str(user.created_by_id) if user.created_by_id else None,
+            "created_by": str(user.created_by) if getattr(user, "created_by", None) else None,
+            "created_by_id": str(user.created_by_id) if getattr(user, "created_by_id", None) else None,
             "is_active": user.is_active,
         },
     )

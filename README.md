@@ -196,41 +196,43 @@ uv run pytest
 | :--- | :--- | :--- | :--- |
 | `POST` | `/platform/login` | Authenticates platform credentials and sets an HTTP-only JWT cookie with cached session | Public (`platform_admin`, `platform_user`) |
 | `DELETE` | `/platform/logout` | Clears the JWT authentication cookie and revokes session | Public |
-| `GET` | `/platform/me` | Fetches currently authenticated platform profile | Protected (`require_platform_access`) |
-| `PUT` | `/platform/me` | Updates current platform user profile | Protected (`require_platform_access`) |
-| `DELETE` | `/platform/me` | Soft deletes current platform user account | Protected (`require_platform_access`) |
+| `GET` | `/platform/me` | Fetches currently authenticated platform profile | Protected (`require_platform`) |
+| `PUT` | `/platform/me` | Updates current platform user profile (without password) | Protected (`require_platform`) |
+| `PATCH` | `/platform/me` | Updates password for currently authenticated user and revokes active sessions | Protected (`require_platform`) |
+| `DELETE` | `/platform/me` | Soft deletes current platform user account | Protected (`require_platform`) |
 
 ### 3. Platform Users (`/platform/users`)
 
 | Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/platform/users` | Create platform accounts (`platform_admin` or `platform_user`) | `platform_admin` only |
-| `GET` | `/platform/users` | List platform admin users | `platform_admin` only |
+| `GET` | `/platform/users` | List platform users (`?deleted=false|true`). When deleted, includes `deleted_at` and `deleted_by: {id, name}` | `platform_admin` only |
 | `GET` | `/platform/users/{user_id}` | Get platform admin user details | `platform_admin` only |
+| `PUT` | `/platform/users/{user_id}` | Update platform user details and optional password | `platform_admin` only |
 | `PATCH` | `/platform/users/{user_id}/status` | Activate or deactivate platform accounts | `platform_admin` only |
-| `DELETE` | `/platform/users/{user_id}` | Soft delete platform accounts | `platform_admin` only |
+| `DELETE` | `/platform/users/{user_id}` | Soft delete platform accounts (records `deleted_by`) | `platform_admin` only |
 
 ### 4. Tenants (`/platform/tenants`)
 
 | Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/platform/tenants` | Create tenant and provision initial tenant administrator atomically | `platform_admin`, `platform_user` |
-| `GET` | `/platform/tenants` | List active tenants (paginated) | `platform_admin`, `platform_user` |
+| `GET` | `/platform/tenants` | List tenants (`?deleted=false|true`). When deleted, includes `deleted_at` and `deleted_by: {id, name}` | `platform_admin`, `platform_user` |
 | `GET` | `/platform/tenants/{tenant_id}` | Get tenant details | `platform_admin`, `platform_user` |
 | `PUT` | `/platform/tenants/{tenant_id}` | Update tenant details | `platform_admin`, `platform_user` |
 | `PATCH` | `/platform/tenants/{tenant_id}` | Update tenant active status or verification (deactivation invalidates tenant sessions) | `platform_admin`, `platform_user` |
-| `DELETE` | `/platform/tenants/{tenant_id}` | Soft delete tenant and invalidate all tenant user sessions | `platform_admin`, `platform_user` |
+| `DELETE` | `/platform/tenants/{tenant_id}` | Soft delete tenant (records `deleted_by`) and invalidate all tenant user sessions | `platform_admin`, `platform_user` |
 
 ### 5. Tenant Users (`/platform/tenants/{tenant_id}/users`)
 
 | Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/platform/tenants/{tenant_id}/users` | Provision new user or administrator within tenant | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
-| `GET` | `/platform/tenants/{tenant_id}/users` | List active users in tenant (`?deleted_users=true` for deleted) | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
+| `GET` | `/platform/tenants/{tenant_id}/users` | List users in tenant (`?deleted=false|true`). When deleted, includes `deleted_at` and `deleted_by: {id, name}` | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
 | `GET` | `/platform/tenants/{tenant_id}/users/{user_id}` | Get tenant user details | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
 | `PUT` | `/platform/tenants/{tenant_id}/users/{user_id}` | Update tenant user profile (revokes active sessions) | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
 | `PATCH` | `/platform/tenants/{tenant_id}/users/{user_id}` | Change user password or status (revokes active sessions) | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
-| `DELETE` | `/platform/tenants/{tenant_id}/users/{user_id}` | Soft delete user and revoke all active sessions | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
+| `DELETE` | `/platform/tenants/{tenant_id}/users/{user_id}` | Soft delete user (records `deleted_by`) and revoke all active sessions | `platform_admin`, `platform_user`, or `tenant_admin` (own tenant) |
 
 ---
 

@@ -24,7 +24,7 @@ async def seed_initial_data() -> None:
                 phone="9876543200",
                 role=UserRole.PLATFORM_ADMIN.value,
                 is_active=True,
-                created_by_id=admin_id,
+                created_by=admin_id,
                 hashed_password=get_password_hash("password"),
             )
             session.add(super_admin)
@@ -32,8 +32,8 @@ async def seed_initial_data() -> None:
             print("[Seed] Created platform_admin: admin")
         else:
             super_admin.role = UserRole.PLATFORM_ADMIN.value
-            if not super_admin.created_by_id or super_admin.created_by_id != super_admin.id:
-                super_admin.created_by_id = super_admin.id
+            if not super_admin.created_by or super_admin.created_by != super_admin.id:
+                super_admin.created_by = super_admin.id
             await session.flush()
             print("[Seed] platform_admin updated")
 
@@ -51,6 +51,7 @@ async def seed_initial_data() -> None:
                 pincode=639001,
                 is_verified=True,
                 is_active=True,
+                created_by=super_admin.id,
             )
             session.add(tenant)
             await session.flush()
@@ -71,7 +72,7 @@ async def seed_initial_data() -> None:
                 phone="9876543211",
                 role=UserRole.TENANT_ADMIN.value,
                 is_active=True,
-                created_by_id=super_admin.id,
+                created_by=super_admin.id,
                 hashed_password=get_password_hash("password"),
             )
             session.add(t_admin)
@@ -92,7 +93,7 @@ async def seed_initial_data() -> None:
                 phone="9876543212",
                 role=UserRole.TENANT_USER.value,
                 is_active=True,
-                created_by_id=t_admin.id if t_admin else super_admin.id,
+                created_by=t_admin.id if t_admin else super_admin.id,
                 hashed_password=get_password_hash("password"),
             )
             session.add(t_user)

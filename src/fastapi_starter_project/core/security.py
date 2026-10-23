@@ -67,7 +67,7 @@ def create_access_token(
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-from fastapi_starter_project.schemas.auth import TokenPayload
+from fastapi_starter_project.schemas.platform.auth import TokenPayload
 
 
 def decode_access_token(token: str) -> TokenPayload:

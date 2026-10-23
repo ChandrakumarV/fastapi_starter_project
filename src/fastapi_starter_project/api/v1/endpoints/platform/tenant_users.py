@@ -7,16 +7,16 @@ from fastapi_starter_project.core.database import get_db
 from fastapi_starter_project.core.dependencies import require_tenant_access
 from fastapi_starter_project.models.user import User
 from fastapi_starter_project.schemas.common import MessageResponse
-from fastapi_starter_project.schemas.tenant_user import (
+from fastapi_starter_project.schemas.platform.tenant_user import (
     TenantUserCreate,
     TenantUserPatch,
     TenantUserResponse,
     TenantUserUpdate,
     UserAuditBrief,
 )
-from fastapi_starter_project.schemas.user import UserInDB
-from fastapi_starter_project.services.tenant_service import tenant_service
-from fastapi_starter_project.services.user_service import user_service
+from fastapi_starter_project.schemas.platform.user import UserInDB
+from fastapi_starter_project.services.platform.tenant_service import tenant_service
+from fastapi_starter_project.services.platform.user_service import user_service
 
 router = APIRouter(
     prefix="/tenants/{tenant_id}/users",
@@ -26,17 +26,19 @@ router = APIRouter(
 
 
 async def _serialize_user(db: AsyncSession, user: User) -> TenantUserResponse:
+    creator_id = getattr(user, "created_by", None) or getattr(user, "created_by_id", None)
     created_by = None
-    if user.created_by_id:
-        stmt = select(User.name).where(User.id == user.created_by_id)
+    if creator_id:
+        stmt = select(User.name).where(User.id == creator_id)
         c_name = (await db.execute(stmt)).scalar_one_or_none()
-        created_by = UserAuditBrief(id=user.created_by_id, name=c_name or "Platform Admin")
+        created_by = UserAuditBrief(id=creator_id, name=c_name or "Platform Admin")
 
+    deleter_id = getattr(user, "deleted_by", None) or getattr(user, "deleted_by_id", None)
     deleted_by = None
-    if user.deleted_by_id:
-        stmt = select(User.name).where(User.id == user.deleted_by_id)
+    if deleter_id:
+        stmt = select(User.name).where(User.id == deleter_id)
         d_name = (await db.execute(stmt)).scalar_one_or_none()
-        deleted_by = UserAuditBrief(id=user.deleted_by_id, name=d_name or "Platform Admin")
+        deleted_by = UserAuditBrief(id=deleter_id, name=d_name or "Platform Admin")
 
     return TenantUserResponse(
         id=user.id,
@@ -59,12 +61,13 @@ async def _serialize_user(db: AsyncSession, user: User) -> TenantUserResponse:
     "",
     response_model=list[TenantUserResponse],
     summary="List tenant users",
-    description="Returns all users belonging to a tenant. Use ?deleted_users=true to list soft-deleted users.",
+    description="Returns all users belonging to a tenant. Use ?deleted=true to list soft-deleted users.",
 )
 async def list_tenant_users(
     tenant_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
-    deleted_users: Annotated[bool, Query(description="Filter deleted users")] = False,
+    deleted: Annotated[bool, Query(description="Filter by deleted status")] = False,
+    deleted_users: Annotated[bool | None, Query(description="Deprecated alias for deleted", include_in_schema=False)] = None,
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> list[TenantUserResponse]:
@@ -74,8 +77,9 @@ async def list_tenant_users(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tenant with ID '{tenant_id}' not found.",
         )
+    is_deleted = deleted if deleted_users is None else deleted_users
     users = await tenant_service.list_tenant_users(
-        db, tenant_id, deleted_users=deleted_users, skip=skip, limit=limit
+        db, tenant_id, deleted=is_deleted, skip=skip, limit=limit
     )
     return [await _serialize_user(db, u) for u in users]
 

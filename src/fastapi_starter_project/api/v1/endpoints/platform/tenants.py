@@ -3,22 +3,22 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.database import get_db
-from fastapi_starter_project.core.dependencies import require_platform_access
+from fastapi_starter_project.core.dependencies import require_platform
 from fastapi_starter_project.schemas.common import MessageResponse
-from fastapi_starter_project.schemas.tenant import (
+from fastapi_starter_project.schemas.platform.tenant import (
     TenantCreate,
     TenantResponse,
     TenantStatusPatch,
     TenantUpdate,
 )
-from fastapi_starter_project.schemas.user import UserInDB
-from fastapi_starter_project.services.tenant_service import tenant_service
-from fastapi_starter_project.services.user_service import user_service
+from fastapi_starter_project.schemas.platform.user import UserInDB
+from fastapi_starter_project.services.platform.tenant_service import tenant_service
+from fastapi_starter_project.services.platform.user_service import user_service
 
 router = APIRouter(
     prefix="/tenants",
     tags=["Tenants Management"],
-    dependencies=[Depends(require_platform_access)],
+    dependencies=[Depends(require_platform)],
 )
 
 
@@ -26,14 +26,17 @@ router = APIRouter(
     "",
     response_model=list[TenantResponse],
     summary="List tenants",
-    description="Returns a paginated list of active/non-deleted tenants.",
+    description="Returns a paginated list of tenants filtered by deleted status.",
 )
 async def list_tenants(
     db: Annotated[AsyncSession, Depends(get_db)],
+    deleted: Annotated[bool, Query(description="Filter by deleted status")] = False,
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> list[TenantResponse]:
-    tenants = await tenant_service.list_tenants(db, skip=skip, limit=limit)
+    tenants = await tenant_service.list_tenants(
+        db, skip=skip, limit=limit, deleted=deleted
+    )
     return [TenantResponse.model_validate(t) for t in tenants]
 
 
@@ -65,7 +68,7 @@ async def get_tenant_details(
 )
 async def create_tenant(
     data: TenantCreate,
-    current_admin: Annotated[UserInDB, Depends(require_platform_access)],
+    current_admin: Annotated[UserInDB, Depends(require_platform)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TenantResponse:
     # 1. Validate username uniqueness
@@ -137,9 +140,12 @@ async def patch_tenant_status(
 )
 async def delete_tenant(
     tenant_id: uuid.UUID,
+    current_admin: Annotated[UserInDB, Depends(require_platform)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MessageResponse:
-    deleted = await tenant_service.delete_tenant(db, tenant_id)
+    deleted = await tenant_service.delete_tenant(
+        db, tenant_id, deleted_by=current_admin.id
+    )
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
