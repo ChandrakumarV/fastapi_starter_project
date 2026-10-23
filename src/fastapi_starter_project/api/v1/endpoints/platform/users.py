@@ -1,17 +1,23 @@
 import uuid
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.database import get_db
 from fastapi_starter_project.core.dependencies import require_platform_admin
+from fastapi_starter_project.core.security import get_password_hash, verify_password
 from fastapi_starter_project.models.enums import UserRole
+from fastapi_starter_project.models.user import User
 from fastapi_starter_project.schemas.common import MessageResponse
 from fastapi_starter_project.schemas.user import (
+    UserAdminUpdate,
     UserCreateAdmin,
     UserInDB,
+    UserPasswordUpdate,
     UserResponse,
     UserStatusUpdate,
 )
+from fastapi_starter_project.services.session_service import session_service
 from fastapi_starter_project.services.user_service import user_service
 
 router = APIRouter(dependencies=[Depends(require_platform_admin)], tags=["Users"])
@@ -108,6 +114,116 @@ async def get_user_by_id(
     return UserResponse.model_validate(user)
 
 
+@router.put(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Update platform user details",
+    description="Updates platform user details (username, email, full_name, phone, role) and invalidates all active sessions for that user.",
+)
+async def update_platform_user_details(
+    user_id: uuid.UUID,
+    user_in: UserAdminUpdate,
+    current_admin: Annotated[UserInDB, Depends(require_platform_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> UserResponse:
+    target_user = await user_service.get_by_id(db, user_id)
+    if not target_user or target_user.role not in PLATFORM_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Platform user with ID {user_id} not found.",
+        )
+
+    # Check username uniqueness if changed
+    if user_in.username != target_user.username:
+        existing_username = await user_service.get_by_username(db, user_in.username)
+        if existing_username and existing_username.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Username '{user_in.username}' is already taken.",
+            )
+
+    # Check email uniqueness if changed
+    if user_in.email != target_user.email:
+        existing_email = await user_service.get_by_email(db, user_in.email)
+        if existing_email and existing_email.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Email '{user_in.email}' is already taken.",
+            )
+
+    role_val = user_in.role.value if hasattr(user_in.role, "value") else str(user_in.role)
+    if role_val not in PLATFORM_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Platform user role must be 'platform_admin' or 'platform_user'.",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
+    db_user = result.scalar_one_or_none()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found.",
+        )
+
+    db_user.user_name = user_in.username
+    db_user.email = user_in.email
+    db_user.name = user_in.full_name
+    db_user.phone = user_in.phone
+    db_user.role = role_val
+
+    await db.commit()
+    await db.refresh(db_user)
+
+    # Invalidate all active sessions for this user in Redis
+    await session_service.invalidate_user_sessions(user_id)
+
+    updated_user = user_service._to_user_in_db(db_user)
+    return UserResponse.model_validate(updated_user)
+
+
+@router.patch(
+    "/users/{user_id}/password",
+    response_model=MessageResponse,
+    summary="Update platform user password",
+    description="Updates platform user password after verifying old password, and invalidates all active sessions for that user.",
+)
+async def update_platform_user_password(
+    user_id: uuid.UUID,
+    pwd_in: UserPasswordUpdate,
+    current_admin: Annotated[UserInDB, Depends(require_platform_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> MessageResponse:
+    target_user = await user_service.get_by_id(db, user_id)
+    if not target_user or target_user.role not in PLATFORM_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Platform user with ID {user_id} not found.",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id, User.is_deleted == False))
+    db_user = result.scalar_one_or_none()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found.",
+        )
+
+    if not verify_password(pwd_in.old_password, db_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect old password.",
+        )
+
+    db_user.hashed_password = get_password_hash(pwd_in.new_password)
+    await db.commit()
+
+    # Invalidate all active sessions for this user in Redis
+    await session_service.invalidate_user_sessions(user_id)
+
+    return MessageResponse(message="User password updated successfully.")
+
+
 @router.patch(
     "/users/{user_id}/status",
     response_model=UserResponse,
@@ -133,6 +249,10 @@ async def set_user_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with ID {user_id} not found or has been deleted.",
         )
+
+    # Invalidate all active sessions for this user in Redis
+    await session_service.invalidate_user_sessions(user_id)
+
     return UserResponse.model_validate(user)
 
 
@@ -166,4 +286,8 @@ async def soft_delete_user_by_admin(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with ID {user_id} not found or already deleted.",
         )
+
+    # Invalidate all active sessions for this user in Redis
+    await session_service.invalidate_user_sessions(user_id)
+
     return MessageResponse(message=f"Platform admin user {user_id} soft deleted successfully.")

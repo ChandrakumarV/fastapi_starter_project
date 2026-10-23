@@ -7,7 +7,7 @@ from fastapi_starter_project.core.redis import get_redis
 
 
 class SessionService:
-    """Manages Redis-backed sessions for tenant users and tenant administrators."""
+    """Manages Redis-backed sessions for platform users and tenant users."""
 
     @staticmethod
     def _session_key(session_id: str) -> str:
@@ -52,7 +52,7 @@ class SessionService:
 
         session_id = str(uuid.uuid4())
         u_id = str(user_id)
-        t_id = str(tenant_id) if tenant_id else ""
+        t_id = str(tenant_id) if tenant_id else None
 
         session_payload = {
             "session_id": session_id,

@@ -20,7 +20,8 @@ async def get_current_user(
 ) -> UserInDB:
     """
     Extracts and verifies JWT from HTTP-only cookie.
-    Validates Redis session for tenant_admin and tenant_user roles.
+    Validates Redis session for platform users (platform_admin, platform_user)
+    and tenant users (tenant_admin, tenant_user).
     """
     if not access_token:
         raise HTTPException(
@@ -58,11 +59,17 @@ async def get_current_user(
                 detail="Invalid or expired session. Please log in again.",
             )
         if session_data.get("username") and session_data.get("user_id"):
+            if not session_data.get("is_active", True):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Inactive user account.",
+                )
             return UserInDB(
                 id=uuid.UUID(str(session_data["user_id"])),
                 username=session_data["username"],
                 email=session_data.get("email", f"{session_data['username']}@example.com"),
                 full_name=session_data.get("full_name", session_data["username"]),
+                phone=session_data.get("phone"),
                 role=session_data.get("role", role or UserRole.PLATFORM_USER.value),
                 tenant_id=uuid.UUID(str(session_data["tenant_id"])) if session_data.get("tenant_id") else None,
                 created_by_id=uuid.UUID(str(session_data["created_by_id"])) if session_data.get("created_by_id") else None,
@@ -70,8 +77,17 @@ async def get_current_user(
                 is_deleted=False,
             )
 
-    # For tenant roles, an active session is mandatory
-    if role in (UserRole.TENANT_ADMIN.value, UserRole.TENANT_USER.value):
+    platform_roles = (
+        UserRole.PLATFORM_ADMIN.value,
+        UserRole.PLATFORM_USER.value,
+    )
+    tenant_roles = (
+        UserRole.TENANT_ADMIN.value,
+        UserRole.TENANT_USER.value,
+    )
+
+    # Active session is mandatory for both platform users and tenant users
+    if role in platform_roles or role in tenant_roles:
         if not session_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

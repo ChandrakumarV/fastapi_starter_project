@@ -48,6 +48,14 @@ def test_platform_flow_and_me_crud(client: TestClient) -> None:
     assert put_res.json()["full_name"] == "John Doe Senior"
     assert "tenant_id" not in put_res.json()
 
+    # Profile update invalidated the previous session, re-login to continue
+    relogin_res = client.post(
+        "/platform/login",
+        json={"username": "admin", "password": "password123"},
+    )
+    assert relogin_res.status_code == 200
+    admin_cookie = {settings.COOKIE_NAME: relogin_res.cookies[settings.COOKIE_NAME]}
+
     # 4. Platform Admin creates a platform user
     new_user_username = f"puser_{uuid.uuid4().hex[:6]}"
     create_res = client.post(
@@ -74,9 +82,14 @@ def test_platform_flow_and_me_crud(client: TestClient) -> None:
     assert "admin" in usernames
     assert new_user_username in usernames
 
-    # 6. DELETE /platform/logout
-    logout_res = client.delete("/platform/logout")
+    # 6. DELETE /platform/logout with cookie succeeds and invalidates Redis session
+    logout_res = client.delete("/platform/logout", cookies=admin_cookie)
     assert logout_res.status_code == 200
+
+    # 7. Subsequent requests with logged out admin_cookie fail
+    revoked_me = client.get("/platform/me", cookies=admin_cookie)
+    assert revoked_me.status_code == 401
+    assert "Invalid or expired session" in revoked_me.json()["detail"]
 
 
 def test_platform_me_denied_for_normal_user(client: TestClient) -> None:
@@ -218,10 +231,20 @@ def test_platform_auth_endpoints(client: TestClient) -> None:
     assert me_res.status_code == 200
     assert me_res.json()["username"] == "admin"
 
-    # 3. Logout via /platform/logout
-    logout_res = client.delete("/platform/logout")
+    # 3. Logout via /platform/logout with cookie succeeds and clears Redis session
+    logout_res = client.delete("/platform/logout", cookies=admin_cookie)
     assert logout_res.status_code == 200
     assert "logged out successfully" in logout_res.json()["message"]
+
+    # 4. Accessing protected endpoint after logout fails
+    after_logout_res = client.get("/platform/me", cookies=admin_cookie)
+    assert after_logout_res.status_code == 401
+    assert "Invalid or expired session" in after_logout_res.json()["detail"]
+
+    # 5. Logout without active session or cookie still succeeds cleanly and clears cookie
+    empty_logout = client.delete("/platform/logout")
+    assert empty_logout.status_code == 200
+    assert "logged out successfully" in empty_logout.json()["message"]
 
 
 def test_openapi_schema(client: TestClient) -> None:
@@ -374,3 +397,97 @@ def test_phone_number_length_validation(client: TestClient) -> None:
     )
     assert valid_phone_res.status_code == 201
     assert valid_phone_res.json()["phone"] == "9876543210"
+
+
+def test_platform_user_put_update_and_password_patch(client: TestClient) -> None:
+    # 1. Login as Platform Admin
+    login_res = client.post(
+        "/platform/login",
+        json={"username": "admin", "password": "password123"},
+    )
+    assert login_res.status_code == 200
+    admin_cookie = {settings.COOKIE_NAME: login_res.cookies[settings.COOKIE_NAME]}
+
+    # 2. Create a platform user
+    orig_uname = f"usr_{uuid.uuid4().hex[:6]}"
+    orig_email = f"{orig_uname}@example.com"
+    create_res = client.post(
+        "/platform/users",
+        json={
+            "username": orig_uname,
+            "email": orig_email,
+            "full_name": "Original Name",
+            "password": "initial_password_123",
+            "phone": "9876543210",
+            "role": "platform_user",
+        },
+        cookies=admin_cookie,
+    )
+    assert create_res.status_code == 201
+    user_id = create_res.json()["id"]
+
+    # 3. User logs in to create active session
+    user_login = client.post(
+        "/platform/login",
+        json={"username": orig_uname, "password": "initial_password_123"},
+    )
+    assert user_login.status_code == 200
+    user_cookie = {settings.COOKIE_NAME: user_login.cookies[settings.COOKIE_NAME]}
+
+    # User can access /platform/me
+    assert client.get("/platform/me", cookies=user_cookie).status_code == 200
+
+    # 4. PUT /platform/users/<user_id> updates user details
+    new_uname = f"upd_{uuid.uuid4().hex[:6]}"
+    new_email = f"{new_uname}@example.com"
+    put_res = client.put(
+        f"/platform/users/{user_id}",
+        json={
+            "username": new_uname,
+            "email": new_email,
+            "full_name": "Updated Platform User",
+            "phone": "9123456780",
+            "role": "platform_user",
+        },
+        cookies=admin_cookie,
+    )
+    assert put_res.status_code == 200
+    assert put_res.json()["username"] == new_uname
+    assert put_res.json()["email"] == new_email
+    assert put_res.json()["full_name"] == "Updated Platform User"
+    assert put_res.json()["phone"] == "9123456780"
+
+    # User's previous session was invalidated by the update
+    assert client.get("/platform/me", cookies=user_cookie).status_code == 401
+
+    # 5. User logs in with new username
+    user_relogin = client.post(
+        "/platform/login",
+        json={"username": new_uname, "password": "initial_password_123"},
+    )
+    assert user_relogin.status_code == 200
+    user_cookie = {settings.COOKIE_NAME: user_relogin.cookies[settings.COOKIE_NAME]}
+
+    # 6. PATCH /platform/users/<user_id>/password
+    pwd_res = client.patch(
+        f"/platform/users/{user_id}/password",
+        json={
+            "old_password": "initial_password_123",
+            "new_password": "new_secure_password_456",
+            "comfirm_new_password": "new_secure_password_456",
+        },
+        cookies=admin_cookie,
+    )
+    assert pwd_res.status_code == 200
+    assert "password updated successfully" in pwd_res.json()["message"]
+
+    # User's session was again invalidated by password change
+    assert client.get("/platform/me", cookies=user_cookie).status_code == 401
+
+    # 7. User logs in with new password
+    new_pwd_login = client.post(
+        "/platform/login",
+        json={"username": new_uname, "password": "new_secure_password_456"},
+    )
+    assert new_pwd_login.status_code == 200
+

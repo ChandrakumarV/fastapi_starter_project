@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_starter_project.core.security import get_password_hash, verify_password
 from fastapi_starter_project.models.user import User
 from fastapi_starter_project.schemas.user import UserInDB, UserUpdate
+from fastapi_starter_project.services.session_service import session_service
 
 
 class UserService:
@@ -23,7 +24,7 @@ class UserService:
             is_active=user.is_active,
             is_deleted=user.is_deleted,
             deleted_at=user.deleted_at,
-            hashed_password=user.hashed_password,
+            hashed_password=user.hashed_password or "",
         )
 
     async def get_by_username(
@@ -151,6 +152,10 @@ class UserService:
 
         await db.commit()
         await db.refresh(db_user)
+
+        # On any update to the user, immediately revoke all active sessions
+        await session_service.invalidate_user_sessions(u_id)
+
         return self._to_user_in_db(db_user)
 
     async def set_user_active_status(
@@ -165,6 +170,10 @@ class UserService:
         db_user.is_active = is_active
         await db.commit()
         await db.refresh(db_user)
+
+        # Invalidate all active sessions on status change
+        await session_service.invalidate_user_sessions(u_id)
+
         return self._to_user_in_db(db_user)
 
     async def delete_user(self, db: AsyncSession, user_id: uuid.UUID | str) -> bool:
@@ -176,6 +185,8 @@ class UserService:
 
         db_user.is_deleted = True
         db_user.deleted_at = datetime.now(timezone.utc)
+        # Immediately revoke all active sessions when user is deleted
+        await session_service.invalidate_user_sessions(u_id)
         await db.commit()
         return True
 
